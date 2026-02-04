@@ -53,7 +53,7 @@ function runStainDetection()
     img = selectImage();
     if ~isempty(img)
         fprintf('Running stain detection...\n');
-        RubberNitrileStainDetector(img);
+        RubberStain(img);
         fprintf('Results displayed and saved to RNpic.mat and RNvariables.mat\n\n');
     end
 end
@@ -76,7 +76,7 @@ function runAllDetectors()
         RubberHole(img);
         
         fprintf('Running stain detection...\n');
-        RubberNitrileStainDetector(img);
+        RubberStain(img);
         
         fprintf('Running missing finger detection...\n');
         RubberFinger(img);

@@ -1,9 +1,8 @@
 function RubberHole(image)
     try
-        gray_img = rgb2gray(image);
-
-        % Noise Reduction: Apply Median filtering
-        filtered_image = medfilt2(gray_img, [3, 3]);
+        % Preprocessing using shared utilities
+        gray_img = GloveDetectionUtils.convertToGrayscale(image);
+        filtered_image = GloveDetectionUtils.applyMedianFilter(gray_img, [3, 3]);
 
         % ===== TEXTURE ANALYSIS =====
         % Calculate local entropy (texture irregularity measure)
@@ -27,10 +26,8 @@ function RubberHole(image)
         % Fill any holes in the binary image to get complete glove mask
         filledImg = imfill(inverted_bwImg, 'holes');
 
-        % Get the biggest object (Glove)
-        RNH_filledMask = bwareafilt(filledImg, 1);
-        SE = strel('disk', 1); 
-        RNH_filledMask = imdilate(RNH_filledMask, SE);
+        % Get the biggest object (Glove) using shared utility
+        RNH_filledMask = GloveDetectionUtils.extractGloveMask(filledImg, 1);
 
         % Create defect mask with morphological opening
         nhood = ones(5); 
@@ -81,65 +78,18 @@ function RubberHole(image)
 
         save(fullfile(pwd, 'RNpic.mat'), 'RNH_filledMask',"RNH_DefectMask","RNH_hole");
 
-        % Find the connected components in the stitch mask
-        holes_cc = bwconncomp(RNH_hole);
-
-        % Calculate the properties of connected components
-        holes_props = regionprops(holes_cc, 'BoundingBox', 'Area');
-
-        % Threshold for minimum area of detected hole (adjust as needed)
+        % Detect and filter defects using shared utility
         min_hole_area = 150;
-
-        % Filter out small holes based on area threshold
-        large_holes = holes_props([holes_props.Area] > min_hole_area);
+        [large_holes, RNH_hole_filtered] = GloveDetectionUtils.detectAndFilterDefects(RNH_hole, min_hole_area);
 
         save(fullfile(pwd, 'RNvariables.mat'), 'large_holes');
 
-        % Display results
-        displayResults(image, large_holes, RNH_hole);
+        % Display results using shared utility
+        GloveDetectionUtils.displayDefectResults(image, large_holes, RNH_hole_filtered, 'Hole');
 
     catch ME
         disp(ME.message);
     end
-end
-
-function displayResults(original_img, large_holes, hole_mask)
-    % Display the detection results
-    figure('Name', 'Rubber Nitrile Hole Detection Results', 'NumberTitle', 'off');
-    
-    % Show original image with bounding boxes
-    subplot(1, 2, 1);
-    imshow(original_img);
-    title(sprintf('Detected Holes: %d', length(large_holes)));
-    hold on;
-    
-    % Draw bounding boxes around detected holes
-    for i = 1:length(large_holes)
-        bbox = large_holes(i).BoundingBox;
-        rectangle('Position', bbox, 'EdgeColor', 'r', 'LineWidth', 2);
-        
-        % Add label with hole number
-        text(bbox(1), bbox(2)-5, sprintf('Hole %d', i), ...
-             'Color', 'red', 'FontSize', 10, 'FontWeight', 'bold', ...
-             'BackgroundColor', 'white');
-    end
-    hold off;
-    
-    % Show mask overlay
-    subplot(1, 2, 2);
-    imshow(labeloverlay(original_img, hole_mask, 'Transparency', 0.5));
-    title('Hole Mask Overlay');
-    
-    % Print summary
-    fprintf('\n=== HOLE DETECTION SUMMARY ===\n');
-    fprintf('Total holes detected: %d\n', length(large_holes));
-    if ~isempty(large_holes)
-        fprintf('\nHole Details:\n');
-        for i = 1:length(large_holes)
-            fprintf('  Hole %d - Area: %.0f pixels\n', i, large_holes(i).Area);
-        end
-    end
-    fprintf('==============================\n\n');
 end
 
 function displayProcessingSteps(original_img, gray_img, filtered_image, entropy_norm, std_norm, texture_score, texture_mask, bwImg, inverted_bwImg, filledImg, RNH_filledMask, RNH_DefectMask, intensity_holes, combined_holes, final_hole_mask)

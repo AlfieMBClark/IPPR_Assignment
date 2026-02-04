@@ -1,10 +1,8 @@
 function RubberNitrileMissingFingerDetector(input_img)
     try
-        % Convert image to grayscale
-        gray_img = rgb2gray(input_img);
-
-        % Apply Gaussian filter for smoothing
-        blurred_img = imgaussfilt(gray_img, 4);
+        % Preprocessing using shared utilities
+        gray_img = GloveDetectionUtils.convertToGrayscale(input_img);
+        blurred_img = GloveDetectionUtils.applyGaussianFilter(gray_img, 4);
 
         % ===== HSV COLOR ANALYSIS =====
         % Convert to HSV for better color discrimination
@@ -126,70 +124,21 @@ function RubberNitrileMissingFingerDetector(input_img)
         
         save(fullfile(pwd, 'RNpic.mat'),'black_mask', 'skin_mask', 'background_mask', 'foreground_mask', 'RN_missingfinger');
 
-        % Find the connected components in the stitch mask
-        finger_cc = bwconncomp(RN_missingfinger);
-
-        % Calculate the properties of connected components
-        finger_props = regionprops(finger_cc, 'BoundingBox', 'Area');
-
-        % Threshold for minimum area of detected stitch (adjust as needed)
-        min_finger_area = 2000; % Reduced threshold for more sensitive detection
-
-        % Filter out small stitches based on area threshold
-        LMissingFinger = finger_props([finger_props.Area] > min_finger_area);
+        % Detect and filter defects using shared utility
+        min_finger_area = 2000;
+        [LMissingFinger, RN_missingfinger_filtered] = GloveDetectionUtils.detectAndFilterDefects(RN_missingfinger, min_finger_area);
 
         save(fullfile(pwd, 'RNvariables.mat'), 'LMissingFinger');
 
         % Display all intermediate processing steps
         displayProcessingSteps(input_img, gray_img, blurred_img, hsv_img, black_mask, skin_mask, background_mask, foreground_mask, edges, edges_dilated, RN_missingfinger);
 
-        % Display final results
-        displayResults(input_img, LMissingFinger, RN_missingfinger);
+        % Display final results using shared utility
+        GloveDetectionUtils.displayDefectResults(input_img, LMissingFinger, RN_missingfinger_filtered, 'Missing Finger');
 
     catch ME
         disp(ME.message);
     end
-end
-
-function displayResults(original_img, missing_fingers, finger_mask)
-    % Display the detection results
-    figure('Name', 'Rubber Nitrile Missing Finger Detection Results', 'NumberTitle', 'off');
-    
-    % Show original image with bounding boxes
-    subplot(1, 2, 1);
-    imshow(original_img);
-    title(sprintf('Detected Missing Fingers: %d', length(missing_fingers)));
-    hold on;
-    
-    % Draw bounding boxes around detected missing fingers
-    for i = 1:length(missing_fingers)
-        bbox = missing_fingers(i).BoundingBox;
-        rectangle('Position', bbox, 'EdgeColor', 'r', 'LineWidth', 2);
-        
-        % Add label with finger number
-        text(bbox(1), bbox(2)-5, sprintf('Missing Finger %d', i), ...
-             'Color', 'red', 'FontSize', 10, 'FontWeight', 'bold', ...
-             'BackgroundColor', 'white');
-    end
-    hold off;
-    
-    % Show mask overlay
-    subplot(1, 2, 2);
-    imshow(labeloverlay(original_img, finger_mask, 'Transparency', 0.5));
-    title('Missing Finger Mask Overlay');
-    
-    % Print summary
-    fprintf('\n=== MISSING FINGER DETECTION SUMMARY ===\n');
-    fprintf('Total missing fingers detected: %d\n', length(missing_fingers));
-    if ~isempty(missing_fingers)
-        fprintf('\nMissing Finger Details:\n');
-        for i = 1:length(missing_fingers)
-            fprintf('  Missing Finger %d - Area: %.0f pixels\n', i, missing_fingers(i).Area);
-        end
-    else
-        fprintf('No missing fingers detected - glove appears complete.\n');
-    end
-    fprintf('========================================\n\n');
 end
 
 function displayProcessingSteps(original_img, gray_img, blurred_img, hsv_img, black_mask, skin_mask, background_mask, foreground_mask, edges, edges_dilated, final_mask)
