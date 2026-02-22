@@ -1,4 +1,5 @@
-function RubberHole(image)
+function RubberHole(image, showFigures)
+    if nargin < 2, showFigures = true; end
     try
         % Preprocessing using shared utilities
         gray_img = GloveDetectionUtils.convertToGrayscale(image);
@@ -73,8 +74,22 @@ function RubberHole(image)
         % Remove very small regions again after morphological operations
         RNH_hole = bwareaopen(RNH_hole, 200);
 
-        % Display all intermediate processing steps for debugging/inspection
-        displayProcessingSteps(image, gray_img, filtered_image, entropy_normalized, std_normalized, texture_score, texture_mask, bwImg, inverted_bwImg, filledImg, RNH_filledMask, RNH_DefectMask, intensity_holes, combined_holes, RNH_hole);
+        % ===== SKIN COLOR FILTER =====
+        % Holes reveal the hand underneath, so they must contain skin-colored pixels.
+        % Build a skin mask in HSV and dilate it to account for edge blurring,
+        % then keep only hole candidates that overlap with skin.
+        hsv_img   = rgb2hsv(image);
+        H = hsv_img(:,:,1); S = hsv_img(:,:,2); V = hsv_img(:,:,3);
+        skin_mask = ((H < 0.12) | (H > 0.92)) & (S > 0.12) & (S < 0.65) & (V > 0.25) & (V < 0.90);
+        skin_mask = medfilt2(skin_mask, [5 5]);
+        skin_mask = bwareaopen(skin_mask, 200);
+        % Dilate skin mask generously so hole edges are included
+        skin_mask = imdilate(skin_mask, strel('disk', 20));
+        % Only keep hole regions that overlap with skin underneath
+        RNH_hole = RNH_hole & skin_mask;
+        if showFigures
+            displayProcessingSteps(image, gray_img, filtered_image, entropy_normalized, std_normalized, texture_score, texture_mask, bwImg, inverted_bwImg, filledImg, RNH_filledMask, RNH_DefectMask, intensity_holes, combined_holes, RNH_hole, skin_mask);
+        end
 
         save(fullfile(pwd, 'RNpic.mat'), 'RNH_filledMask',"RNH_DefectMask","RNH_hole");
 
@@ -84,15 +99,17 @@ function RubberHole(image)
 
         save(fullfile(pwd, 'RNvariables.mat'), 'large_holes');
 
-        % Display results using shared utility
-        GloveDetectionUtils.displayDefectResults(image, large_holes, RNH_hole_filtered, 'Hole');
+        % Display results using shared utility (only when requested)
+        if showFigures
+            GloveDetectionUtils.displayDefectResults(image, large_holes, RNH_hole_filtered, 'Hole');
+        end
 
     catch ME
         disp(ME.message);
     end
 end
 
-function displayProcessingSteps(original_img, gray_img, filtered_image, entropy_norm, std_norm, texture_score, texture_mask, bwImg, inverted_bwImg, filledImg, RNH_filledMask, RNH_DefectMask, intensity_holes, combined_holes, final_hole_mask)
+function displayProcessingSteps(original_img, gray_img, filtered_image, entropy_norm, std_norm, texture_score, texture_mask, bwImg, inverted_bwImg, filledImg, RNH_filledMask, RNH_DefectMask, intensity_holes, combined_holes, final_hole_mask, skin_mask)
     % Display step-by-step intermediate outputs in a tiled figure
     h = figure('Name', 'Processing Steps - Rubber Nitrile Hole Detection', 'NumberTitle', 'off', 'Position', [100 100 1400 900]);
     try
@@ -113,8 +130,8 @@ function displayProcessingSteps(original_img, gray_img, filtered_image, entropy_
 
         subplot(4,4,13); imshow(intensity_holes); title('Intensity-based Holes');
         subplot(4,4,14); imshow(combined_holes); title('Combined Intensity & Texture');
-        subplot(4,4,15); imshow(final_hole_mask); title('Final Hole Mask (morph ops)');
-        subplot(4,4,16); imshow(labeloverlay(original_img, final_hole_mask, 'Transparency', 0.6)); title('Overlay: Holes on Image');
+        subplot(4,4,15); imshow(skin_mask); title('Skin Mask (HSV) ★');
+        subplot(4,4,16); imshow(labeloverlay(original_img, final_hole_mask, 'Transparency', 0.5)); title('Final: Skin-confirmed Holes');
 
         drawnow;
     catch

@@ -1,4 +1,5 @@
-function RubberNitrileMissingFingerDetector(input_img)
+function RubberNitrileMissingFingerDetector(input_img, showFigures)
+    if nargin < 2, showFigures = true; end
     try
         % Preprocessing using shared utilities
         gray_img = GloveDetectionUtils.convertToGrayscale(input_img);
@@ -130,11 +131,11 @@ function RubberNitrileMissingFingerDetector(input_img)
 
         save(fullfile(pwd, 'RNvariables.mat'), 'LMissingFinger');
 
-        % Display all intermediate processing steps
-        displayProcessingSteps(input_img, gray_img, blurred_img, hsv_img, black_mask, skin_mask, background_mask, foreground_mask, edges, edges_dilated, RN_missingfinger);
-
-        % Display final results using shared utility
-        GloveDetectionUtils.displayDefectResults(input_img, LMissingFinger, RN_missingfinger_filtered, 'Missing Finger');
+        % Display all intermediate processing steps (only when requested)
+        if showFigures
+            displayProcessingSteps(input_img, gray_img, blurred_img, hsv_img, black_mask, skin_mask, background_mask, foreground_mask, edges, edges_dilated, RN_missingfinger);
+            GloveDetectionUtils.displayDefectResults(input_img, LMissingFinger, RN_missingfinger_filtered, 'Missing Finger');
+        end
 
     catch ME
         disp(ME.message);

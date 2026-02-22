@@ -1,5 +1,11 @@
 classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
 
+    % Internal state for mask toggle
+    properties (Access = private)
+        MaskVisible  logical = false  % tracks whether mask overlay is currently shown
+        OriginalImage              % stores the clean detection result image
+    end
+
     % Properties that correspond to app components
     properties (Access = public)
         UIFigure     matlab.ui.Figure
@@ -16,6 +22,7 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
         text4        matlab.ui.control.Label
         Hole         matlab.ui.control.Label
         pushbutton3  matlab.ui.control.Button
+        showStepsBtn matlab.ui.control.Button
         text2        matlab.ui.control.Label
         pushbutton1  matlab.ui.control.Button
         axes1        matlab.ui.control.UIAxes
@@ -30,6 +37,11 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
             app.text6.Text = '0';
             app.text7.Text = '0';
             app.text8.Text = '0';
+            % Reset mask toggle
+            app.MaskVisible = false;
+            app.OriginalImage = [];
+            app.pushbutton6.Text = 'Show Masks';
+            app.pushbutton6.BackgroundColor = [0.0745 0.6235 1];
 
             [File_Name, Path_Name] = uigetfile({'*.jpg;*.png;*.bmp;*.tif', 'Image Files (*.jpg, *.png, *.bmp, *.tif)'}, 'Select image');
             if isequal(File_Name, 0)
@@ -53,10 +65,15 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
                 uialert(app.UIFigure, 'Please load an image first.', 'No Image');
                 return;
             end
+            % Reset mask toggle state
+            app.MaskVisible = false;
+            app.OriginalImage = [];
+            app.pushbutton6.Text = 'Show Masks';
+            app.pushbutton6.BackgroundColor = [0.0745 0.6235 1];
 
             switch app.popupmenu1.Value
                 case 'Missing Finger'
-                    RubberFinger(input);
+                    RubberFinger(input, false);
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text6.Text = num2str(numel(count.LMissingFinger));
                     imshow(input, 'Parent', app.axes1);
@@ -66,7 +83,7 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
                     end
 
                 case 'Hole'
-                    RubberHole(input);
+                    RubberHole(input, false);
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text7.Text = num2str(numel(count.large_holes));
                     imshow(input, 'Parent', app.axes1);
@@ -76,7 +93,7 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
                     end
 
                 case 'Stain'
-                    RubberStain(input);
+                    RubberStain(input, false);
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text8.Text = num2str(numel(count.large_stains));
                     imshow(input, 'Parent', app.axes1);
@@ -89,27 +106,105 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
 
         % Button pushed function: pushbutton6
         function ShowMaskbutton6ButtonPushed(app, event)
+            if ~isfile(fullfile(pwd, 'RNpic.mat')) || ~isfile(fullfile(pwd, 'RNvariables.mat'))
+                uialert(app.UIFigure, 'No detection results found. Run "Apply Defects" first.', 'No Results');
+                return;
+            end
+
+            % Toggle OFF — restore the clean detection image
+            if app.MaskVisible
+                app.MaskVisible = false;
+                app.pushbutton6.Text = 'Show Masks';
+                app.pushbutton6.BackgroundColor = [0.0745 0.6235 1];
+                if ~isempty(app.OriginalImage)
+                    imshow(app.OriginalImage, 'Parent', app.axes1);
+                    % Re-draw bounding boxes without mask
+                    count = load(fullfile(pwd, 'RNvariables.mat'));
+                    hold(app.axes1, 'on');
+                    switch app.popupmenu1.Value
+                        case 'Missing Finger'
+                            defects = count.LMissingFinger; label = 'Missing Finger';
+                        case 'Hole'
+                            defects = count.large_holes; label = 'Hole';
+                        case 'Stain'
+                            defects = count.large_stains; label = 'Stain';
+                    end
+                    for i = 1:numel(defects)
+                        bbox = defects(i).BoundingBox;
+                        rectangle(app.axes1, 'Position', bbox, 'EdgeColor', 'r', 'LineWidth', 2);
+                    end
+                    hold(app.axes1, 'off');
+                end
+                return;
+            end
+
+            % Toggle ON — apply mask overlay
+            input = getimage(app.axes1);
+            if isempty(input)
+                uialert(app.UIFigure, 'Please load an image first.', 'No Image');
+                return;
+            end
+
+            picture = load(fullfile(pwd, 'RNpic.mat'));
+            count   = load(fullfile(pwd, 'RNvariables.mat'));
+
             switch app.popupmenu1.Value
                 case 'Missing Finger'
-                    picture = load(fullfile(pwd, 'RNpic.mat'));
-                    figure('Name', 'Masks');
-                    subplot(131); imshow(picture.foreground_mask); title('Foreground Mask');
-                    subplot(132); imshow(picture.skin_mask); title('Skin Mask');
-                    subplot(133); imshow(picture.RN_missingfinger); title('Final Mask');
+                    mask    = picture.RN_missingfinger;
+                    defects = count.LMissingFinger;
+                    label   = 'Missing Finger';
+                case 'Hole'
+                    mask    = picture.RNH_hole;
+                    defects = count.large_holes;
+                    label   = 'Hole';
+                case 'Stain'
+                    mask    = picture.RNS_stain_mask;
+                    defects = count.large_stains;
+                    label   = 'Stain';
+            end
+
+            % Save clean image before overlaying
+            app.OriginalImage = input;
+            app.MaskVisible   = true;
+            app.pushbutton6.Text = 'Hide Masks';
+            app.pushbutton6.BackgroundColor = [0.9294 0.6902 0.1294];
+
+            overlaid = labeloverlay(input, mask, 'Colormap', [0.1176 0.5647 1], 'Transparency', 0.45);
+            imshow(overlaid, 'Parent', app.axes1);
+            hold(app.axes1, 'on');
+            for i = 1:numel(defects)
+                bbox = defects(i).BoundingBox;
+                rectangle(app.axes1, 'Position', bbox, 'EdgeColor', 'r', 'LineWidth', 2);
+                text(app.axes1, bbox(1), bbox(2) - 8, sprintf('%s %d', label, i), ...
+                     'Color', 'red', 'FontSize', 11, 'FontWeight', 'bold', ...
+                     'BackgroundColor', 'white', 'Margin', 2);
+            end
+            hold(app.axes1, 'off');
+        end
+
+        % Button pushed function: showStepsBtn
+        function ShowStepsButtonPushed(app, event)
+            input = getimage(app.axes1);
+            if isempty(input)
+                uialert(app.UIFigure, 'Please load an image first.', 'No Image');
+                return;
+            end
+
+            switch app.popupmenu1.Value
+                case 'Missing Finger'
+                    RubberFinger(input, true);
+                    count = load(fullfile(pwd, 'RNvariables.mat'));
+                    app.text6.Text = num2str(numel(count.LMissingFinger));
 
                 case 'Hole'
-                    picture = load(fullfile(pwd, 'RNpic.mat'));
-                    figure('Name', 'Masks');
-                    subplot(131); imshow(picture.RNH_filledMask); title('Filled Mask');
-                    subplot(132); imshow(picture.RNH_DefectMask); title('Defect Mask');
-                    subplot(133); imshow(picture.RNH_hole); title('Final Mask');
+                    RubberHole(input, true);
+                    count = load(fullfile(pwd, 'RNvariables.mat'));
+                    app.text7.Text = num2str(numel(count.large_holes));
 
                 case 'Stain'
-                    picture = load(fullfile(pwd, 'RNpic.mat'));
-                    figure('Name', 'Masks');
-                    subplot(131); imshow(picture.RNS_glove_mask); title('Glove Mask');
-                    subplot(132); imshow(picture.RNS_defect_mask); title('Defect Mask');
-                    subplot(133); imshow(picture.RNS_stain_mask); title('Final Mask');
+                    RubberStain(input, true);
+                    count = load(fullfile(pwd, 'RNvariables.mat'));
+                    app.text8.Text = num2str(numel(count.large_stains));
             end
         end
 
@@ -179,8 +274,19 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
             app.pushbutton3.FontSize = 14;
             app.pushbutton3.FontWeight = 'bold';
             app.pushbutton3.FontColor = [1 1 1];
-            app.pushbutton3.Position = [116 341 214 76];
+            app.pushbutton3.Position = [116 360 214 57];
             app.pushbutton3.Text = 'Apply Defects';
+
+            % Create showStepsBtn
+            app.showStepsBtn = uibutton(app.uipanel1, 'push');
+            app.showStepsBtn.ButtonPushedFcn = createCallbackFcn(app, @ShowStepsButtonPushed, true);
+            app.showStepsBtn.Tag = 'showStepsBtn';
+            app.showStepsBtn.BackgroundColor = [0.1529 0.6824 0.3765];
+            app.showStepsBtn.FontSize = 13;
+            app.showStepsBtn.FontWeight = 'bold';
+            app.showStepsBtn.FontColor = [1 1 1];
+            app.showStepsBtn.Position = [116 315 214 40];
+            app.showStepsBtn.Text = 'Show Steps & Ask';
 
             % Create uipanel2
             app.uipanel2 = uipanel(app.uipanel1);
