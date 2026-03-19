@@ -4,7 +4,7 @@ function RubberFinger(input_img, showFigures)
         %hared utilities
         gray_img = GloveDetectionUtils.convertToGrayscale(input_img);
         
-        % Apply CLAHE for lighting normalization - makes code robust to different lighting
+        %CLAHE for lighting normalization
         gray_img = adapthisteq(gray_img, 'NumTiles', [8 8], 'ClipLimit', 0.02);
         
         blurred_img = GloveDetectionUtils.applyGaussianFilter(gray_img, 4);
@@ -17,16 +17,17 @@ function RubberFinger(input_img, showFigures)
         V = hsv_img(:,:,3); %brightness
         
         % Detect Glove
-        black_mask = (V < 0.3) & (S < 0.5);
+        black_mask = (V < 0.38) & (S < 0.60);
         black_mask = medfilt2(black_mask, [5 5]); % Rmv noise
         black_mask = imfill(black_mask, 'holes');
         black_mask = bwareaopen(black_mask, 500);
         black_mask = bwareafilt(black_mask, 1); % Get largest
         
+        %Glove Type
         non_background_mask = ~((S < 0.15) & (V > 0.5) & (V < 0.95));
         non_background_pixels = max(1, nnz(non_background_mask));
         black_coverage = nnz(black_mask & non_background_mask) / non_background_pixels;
-        if black_coverage < 0.22
+        if black_coverage < 0.18
             RN_missingfinger = false(size(V));
             LMissingFinger = struct('BoundingBox', {}, 'Area', {});
             background_mask = ~non_background_mask;
@@ -37,15 +38,19 @@ function RubberFinger(input_img, showFigures)
             if showFigures
                 figure('Name', 'Rubber Nitrile Missing Finger Detection', 'NumberTitle', 'off');
                 imshow(input_img);
-                title(sprintf('Skipped: Defect not Detected for this type of glove'));
+                title(sprintf('Defect not Detected for this type of glove'));
             end
             return;
         end
         
         % Detect skin
-        skin_mask = ((H < 0.12) | (H > 0.92)) & (S > 0.25) & (S < 0.50) & (V > 0.35) & (V < 0.75);
+        skin_hue = (H < 0.12) | (H > 0.92);
+        skin_mask_main = skin_hue & (S > 0.16) & (S < 0.62) & (V > 0.30) & (V < 0.92);
+        % Include flash-highlighted skin centers that are brighter and less saturated.
+        skin_mask_highlight = skin_hue & (S > 0.08) & (S < 0.35) & (V >= 0.70) & (V < 0.98);
+        skin_mask = skin_mask_main | skin_mask_highlight;
         skin_mask = medfilt2(skin_mask, [5 5]);
-        skin_mask = bwareaopen(skin_mask, 500);
+        skin_mask = bwareaopen(skin_mask, 180);
         
         %remove isolated small regions
         skin_mask = bwmorph(skin_mask, 'close', 2);
@@ -115,6 +120,33 @@ function RubberFinger(input_img, showFigures)
         %skin inside glove region.
         RN_missingfinger = skin_mask & foreground_mask;
 
+        % Orientation-invariant wrist suppression:
+        % estimate hand axis from foreground shape, then identify which end is wrist
+        % by comparing local thickness near each axis extreme.
+        [fg_y, fg_x] = find(foreground_mask);
+        fg_points = [double(fg_x), double(fg_y)];
+        fg_center = mean(fg_points, 1);
+        fg_cov = cov(fg_points);
+        [fg_vecs, fg_vals] = eig(fg_cov);
+        [~, major_idx] = max(diag(fg_vals));
+        hand_axis = fg_vecs(:, major_idx);
+
+        proj_fg = (fg_points(:,1) - fg_center(1)) * hand_axis(1) + (fg_points(:,2) - fg_center(2)) * hand_axis(2);
+        proj_min = min(proj_fg);
+        proj_max = max(proj_fg);
+        proj_span = max(proj_max - proj_min, eps);
+
+        [yy, xx] = ndgrid(1:size(foreground_mask,1), 1:size(foreground_mask,2));
+        proj_map = (double(xx) - fg_center(1)) * hand_axis(1) + (double(yy) - fg_center(2)) * hand_axis(2);
+        end_band_frac = 0.12;
+        end_band_min = foreground_mask & (proj_map <= (proj_min + end_band_frac * proj_span));
+        end_band_max = foreground_mask & (proj_map >= (proj_max - end_band_frac * proj_span));
+
+        fg_dist = bwdist(~foreground_mask);
+        thick_min = mean(fg_dist(end_band_min));
+        thick_max = mean(fg_dist(end_band_max));
+        wrist_is_min_end = thick_min >= thick_max;
+
         % Reject interior holes using distance to OUTER glove  boundary.
         outer_glove_boundary = bwperim(foreground_mask);
         dist_to_outer_boundary = bwdist(outer_glove_boundary);
@@ -131,8 +163,26 @@ function RubberFinger(input_img, showFigures)
             touches_outer_edge_zone = min_dist <= edge_distance_threshold;
             is_deep_interior = mean_dist > deep_interior_threshold;
 
+            comp = false(size(RN_missingfinger));
+            comp(pixel_idx) = true;
+            comp_props = regionprops(comp, 'Area', 'BoundingBox', 'Centroid');
+            comp_area = comp_props(1).Area;
+            bb = comp_props(1).BoundingBox;
+            bb_aspect = max(bb(3), bb(4)) / max(min(bb(3), bb(4)), 1);
+            comp_centroid = comp_props(1).Centroid;
+            comp_proj = (comp_centroid(1) - fg_center(1)) * hand_axis(1) + (comp_centroid(2) - fg_center(2)) * hand_axis(2);
+            comp_pos_norm = (comp_proj - proj_min) / proj_span;
+            if wrist_is_min_end
+                wrist_proximity = 1 - comp_pos_norm;
+            else
+                wrist_proximity = comp_pos_norm;
+            end
+
+            % Wrist skin is typically broad and near the thicker hand end.
+            wrist_like_component = (wrist_proximity > 0.72) && (comp_area > 350) && (bb_aspect < 2.2);
+
             % Missing fingers near perimeter
-            keep_components(k) = touches_outer_edge_zone && ~is_deep_interior;
+            keep_components(k) = touches_outer_edge_zone && ~is_deep_interior && ~wrist_like_component;
         end
 
         RN_missingfinger_filtered_components = false(size(RN_missingfinger));

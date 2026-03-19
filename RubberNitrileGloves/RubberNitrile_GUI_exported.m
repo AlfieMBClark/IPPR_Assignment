@@ -46,7 +46,7 @@ classdef RubberNitrile_GUI_exported < matlab.apps.AppBase
             app.pushbutton6.Text = 'Show Masks';
             app.pushbutton6.BackgroundColor = [0.0745 0.6235 1];
 
-            [File_Name, Path_Name] = uigetfile({'*.jpg;*.png;*.bmp;*.tif;*.jpeg', 'Image Files (*.jpg, *.png, *.bmp, *.tif, *.jpeg)'}, 'Select image');
+            [File_Name, Path_Name] = uigetfile({'*.jpg;*.png;*.bmp;*.tif', 'Image Files (*.jpg, *.png, *.bmp, *.tif)'}, 'Select image');
             if isequal(File_Name, 0)
                 return;
             end
@@ -376,6 +376,7 @@ classdef RubberNitrile_GUI_exported < matlab.apps.AppBase
                     app.text8.Text = num2str(numel(count.large_stains));
             end
         end
+
 
         function popupmenu1ValueChanged(app, event)
         end

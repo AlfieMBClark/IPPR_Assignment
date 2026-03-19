@@ -23,7 +23,7 @@ function RubberStain(input_image, showFigures)
         RNS_defect_mask = imopen(inverted_binary_image, structuring_element);
 
         %Stain candidates
-        glove_interior = imerode(RNS_glove_mask, strel('disk', 2));
+        glove_interior = imerode(RNS_glove_mask, strel('disk', 0));
         cavity_candidates = RNS_glove_mask & ~inverted_binary_image;
         cavity_candidates = cavity_candidates & glove_interior;
         cavity_candidates = bwareaopen(cavity_candidates, 6);
@@ -32,8 +32,8 @@ function RubberStain(input_image, showFigures)
         hsv_img = rgb2hsv(input_image);
         H = hsv_img(:,:,1); S = hsv_img(:,:,2); V = hsv_img(:,:,3);
 
-        % Validate glove type: only run this detector for predominantly black/dark gloves.
-        black_mask = (V < 0.3) & (S < 0.5);
+        % Validate glove type: only run this detector for predominantly black/dark gloves
+        black_mask = (V < 0.38) & (S < 0.60);
         black_mask = medfilt2(black_mask, [5 5]);
         black_mask = imfill(black_mask, 'holes');
         black_mask = bwareaopen(black_mask, 500);
@@ -42,7 +42,7 @@ function RubberStain(input_image, showFigures)
         non_background_mask = ~((S < 0.15) & (V > 0.5) & (V < 0.95));
         non_background_pixels = max(1, nnz(non_background_mask));
         black_coverage = nnz(black_mask & non_background_mask) / non_background_pixels;
-        if black_coverage < 0.22
+        if black_coverage < 0.18
             RNS_glove_mask = false(size(V));
             RNS_defect_mask = false(size(V));
             RNS_stain_mask = false(size(V));
@@ -62,6 +62,8 @@ function RubberStain(input_image, showFigures)
 
         %detect skin to reject holes
         skin_mask = ((H < 0.12) | (H > 0.92)) & (S > 0.16) & (S < 0.70) & (V > 0.18) & (V < 0.90);
+        % Avoid classifying bright low-saturation stain blobs as skin.
+        skin_mask = skin_mask & ~((S < 0.28) & (V > 0.66));
         skin_mask = medfilt2(skin_mask, [5 5]);
         skin_mask = bwareaopen(skin_mask & glove_interior, 80);
 
@@ -84,9 +86,20 @@ function RubberStain(input_image, showFigures)
             skin_overlap = nnz(comp & skin_mask) / max(comp_area, 1);
             mean_s = mean(S(comp));
             mean_v = mean(V(comp));
+            white_core_ratio = nnz((S < 0.28) & (V > 0.70) & comp) / max(comp_area, 1);
+            strong_white_stain = (white_core_ratio > 0.50) && (mean_s < 0.33) && (mean_v > 0.60);
+            comp_props = regionprops(comp, 'BoundingBox', 'Area');
+            bb = comp_props(1).BoundingBox;
+            bb_aspect = max(bb(3), bb(4)) / max(min(bb(3), bb(4)), 1);
+            bb_extent = comp_props(1).Area / max(bb(3) * bb(4), 1);
+
+            % Reject thin boundary strips, but allow compact edge stains.
+            boundary_strip_like = touches_boundary && (bb_aspect > 3.0 || bb_extent < 0.30);
+            passes_skin_gate = (skin_overlap < 0.12) || strong_white_stain;
+
             %reject skin and border strips.
             keep_comp = (comp_area >= 6) && (mean_v > 0.55) && (mean_s < 0.42) ...
-                && (skin_overlap < 0.12) && ~(touches_boundary && comp_area > 180);
+                && passes_skin_gate && ~boundary_strip_like;
             if keep_comp
                 RNS_stain_mask = RNS_stain_mask | comp;
             end
