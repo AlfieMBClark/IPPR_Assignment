@@ -47,12 +47,10 @@ function RubberHole(image, showFigures)
 
         filledImg = imdilate(filledImg, strel('disk', 2)); % recover edge pixels
 
-        % Conditional glare mode:
-        % Keep original pipeline for normal images, but if reflection is high on glove,
-        % switch to reflection-suppressed adaptive thresholding.
+        % Conditional glare mode reflection is high on glove,
         glove_interior_for_glare = imerode(filledImg, strel('disk', 4));
-        % High-glare trigger uses bright coverage in binarized glove plus a
-        % specular fallback for concentrated reflection patches.
+        %uses bright coverage in binarized glove plus a
+        %specular fallback for concentrated reflection patches.
         glare_like_pixels = bwImg & glove_interior_for_glare;
         bright_ratio = nnz(glare_like_pixels) / max(nnz(glove_interior_for_glare), 1);
         specular_like_pixels = (S < 0.25) & (V > 0.72) & glove_interior_for_glare;
@@ -110,8 +108,8 @@ function RubberHole(image, showFigures)
         texture_holes = bwareaopen(texture_holes, 12);
         combined_holes = cavity_holes | texture_holes;
 
-        % High-glare alternative: derive candidates from enclosed local std-dev regions
-        % that overlap bright (white) binarized glove pixels AND skin-like areas.
+        % High-glare - derive candidates from enclosed local std-dev regions
+        % overlap bright binarized glove pixels AND skin-like areas.
         if high_glare_mode
             std_vals = std_normalized(glove_interior_for_glare);
             std_thr = mean(std_vals) + 0.65 * std(std_vals);
@@ -125,7 +123,7 @@ function RubberHole(image, showFigures)
             high_glare_bright_on_glove = imopen(high_glare_bright_on_glove, strel('disk', 1));
             high_glare_bright_on_glove = bwareaopen(high_glare_bright_on_glove, 20);
 
-            % Gate candidates with skin-like color regions
+            % Gate candidates
             skin_hue_like = (H < 0.12) | (H > 0.92);
             skin_sat_like = (S > 0.16) & (S < 0.70);
             skin_val_like = (V > 0.18) & (V < 0.90);
@@ -137,7 +135,7 @@ function RubberHole(image, showFigures)
             high_glare_candidates = imfill(high_glare_candidates, 'holes');
             high_glare_candidates = bwareaopen(high_glare_candidates, 50);
 
-            % Use this alternative candidate source for high-glare images.
+            %candidate source for high-glare images.
             combined_holes = high_glare_candidates;
             intensity_holes = high_glare_candidates;
         end
@@ -145,7 +143,7 @@ function RubberHole(image, showFigures)
         %SKIN COLOUR
         glove_interior = imerode(filledImg, strel('disk', 4));
 
-        % High-glare-only: use local std-dev to reject wrinkle/crease structures.
+        % High-glare-only: local std-dev to reject wrinkle/crease structures.
         if high_glare_mode
             std_vals = std_normalized(glove_interior);
             std_mean = mean(std_vals);
@@ -172,13 +170,12 @@ function RubberHole(image, showFigures)
         skin_mask = imclearborder(skin_mask);
         skin_mask = imdilate(skin_mask, strel('disk', 3));
  
-        % For high glare mode, use high_glare_candidates directly as final result
+        %high glare mode
         if high_glare_mode
             RNH_hole = high_glare_candidates;
             high_glare_final = RNH_hole;
         else
-            %fill each candidate hole, keep if it overlaps skin mask.
-            % Reject potential missing finger
+            %fill keep if overlaps skin
             cc_holes = bwconncomp(combined_holes);
             RNH_hole = false(size(intensity_holes));
             glove_area = nnz(filledImg);
@@ -190,7 +187,7 @@ function RubberHole(image, showFigures)
                 comp(cc_holes.PixelIdxList{k}) = true;
                 comp_filled = imfill(comp, 'holes');
 
-                % Missing finger: if candidate touches glove border and is large.
+                %reject border + big
                 touches_boundary = any(comp_filled(:) & glove_boundary_band(:));
                 area_ratio = nnz(comp_filled) / max(glove_area, 1);
                 comp_area = nnz(comp_filled);
@@ -218,12 +215,12 @@ function RubberHole(image, showFigures)
                     contrast_ok = false;
                 end
 
-                % Reject boundary strips from glove edges.
+                % Reject strips from edge
                 boundary_strip_like = touches_boundary && (bb_aspect > 3.0 || bb_extent < 0.32);
                 tiny_boundary_gap = touches_boundary && (comp_area < 90);
                 interior_contrast_hole = ~touches_boundary && contrast_ok;
 
-                % Additional sunscreen-stain rejection
+                % Additional filtering rejection
                 comp_mean_s = mean(S(comp_filled));
                 comp_mean_v = mean(V(comp_filled));
                 bright_low_sat_ratio = nnz((S < 0.25) & (V > 0.68) & comp_filled) / max(comp_area, 1);
@@ -242,7 +239,7 @@ function RubberHole(image, showFigures)
         end
         save(fullfile(pwd, 'RNpic.mat'), 'RNH_filledMask',"RNH_DefectMask","RNH_hole", 'high_glare_mode', 'glare_ratio', 'high_glare_std_enclosed', 'high_glare_bright_on_glove', 'high_glare_candidates', 'high_glare_final');
  
-        % Detect and filter defects
+        % Detect and filter
         min_hole_area = 60;
         [large_holes, ~] = GloveDetectionUtils.detectAndFilterDefects(RNH_hole, min_hole_area);
  

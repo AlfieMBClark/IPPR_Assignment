@@ -55,7 +55,7 @@ classdef RubberNitrile_GUI < matlab.apps.AppBase
 
             % Resize for display for img
             try
-                pos = app.axes1.Position; % [left bottom width height]
+                pos = app.axes1.Position;
                 targetW = max(1, round(pos(3)));
                 targetH = max(1, round(pos(4)));
                 imH = size(im, 1);
@@ -99,20 +99,30 @@ classdef RubberNitrile_GUI < matlab.apps.AppBase
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text6.Text = num2str(numel(count.LMissingFinger));
                     imshow(input, 'Parent', app.axes1, 'InitialMagnification', 'fit');
+                    hold(app.axes1, 'on');
                     for i = 1:numel(count.LMissingFinger)
                         bbox = count.LMissingFinger(i).BoundingBox;
                         rectangle(app.axes1, 'Position', bbox, 'EdgeColor', [1 0 0], 'LineWidth', 2);
+                        text(app.axes1, bbox(1), bbox(2) - 8, sprintf('Missing Finger %d', i), ...
+                             'Color', [1 0 0], 'FontSize', 10, 'FontWeight', 'bold', ...
+                             'BackgroundColor', 'white', 'Margin', 2);
                     end
+                    hold(app.axes1, 'off');
 
                 case 'Hole'
                     RubberHole(input, false);
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text7.Text = num2str(numel(count.large_holes));
                     imshow(input, 'Parent', app.axes1, 'InitialMagnification', 'fit');
+                    hold(app.axes1, 'on');
                     for i = 1:numel(count.large_holes)
                         bbox = count.large_holes(i).BoundingBox;
                         rectangle(app.axes1, 'Position', bbox, 'EdgeColor', [1 0.65 0], 'LineWidth', 2);
+                        text(app.axes1, bbox(1), bbox(2) - 8, sprintf('Hole %d', i), ...
+                             'Color', [1 0.4 0], 'FontSize', 10, 'FontWeight', 'bold', ...
+                             'BackgroundColor', 'white', 'Margin', 2);
                     end
+                    hold(app.axes1, 'off');
 
                 case 'Stain'
                     RubberStain(input, false);
@@ -348,33 +358,116 @@ classdef RubberNitrile_GUI < matlab.apps.AppBase
 
             switch app.popupmenu1.Value
                 case 'Missing Finger'
-                    RubberFinger(input, true);
+                    fingerFigs = app.runDetectorWithFigureCapture(@() RubberFinger(input, true));
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text6.Text = num2str(numel(count.LMissingFinger));
+                    fingerTitles = app.detectorTabTitles('Missing Finger', numel(fingerFigs));
+                    app.showFiguresInTabs(fingerFigs, fingerTitles, 'Missing Finger - Steps and Output');
 
                 case 'Hole'
-                    RubberHole(input, true);
+                    holeFigs = app.runDetectorWithFigureCapture(@() RubberHole(input, true));
+                    holePic = load(fullfile(pwd, 'RNpic.mat'));
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text7.Text = num2str(numel(count.large_holes));
+                    holeTitles = app.detectorTabTitles('Hole', numel(holeFigs));
+                    if isfield(holePic, 'high_glare_mode') && holePic.high_glare_mode && numel(holeTitles) >= 3
+                        tmpTitle = holeTitles{2};
+                        holeTitles{2} = holeTitles{3};
+                        holeTitles{3} = tmpTitle;
+                    end
+                    app.showFiguresInTabs(holeFigs, holeTitles, 'Hole - Steps and Output');
 
                 case 'Stain'
-                    RubberStain(input, true);
+                    stainFigs = app.runDetectorWithFigureCapture(@() RubberStain(input, true));
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text8.Text = num2str(numel(count.large_stains));
+                    stainTitles = app.detectorTabTitles('Stain', numel(stainFigs));
+                    app.showFiguresInTabs(stainFigs, stainTitles, 'Stain - Steps and Output');
 
                 case 'Run all'
-                    RubberFinger(input, true);
+                    fingerFigs = app.runDetectorWithFigureCapture(@() RubberFinger(input, true));
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text6.Text = num2str(numel(count.LMissingFinger));
 
-                    RubberHole(input, true);
+                    holeFigs = app.runDetectorWithFigureCapture(@() RubberHole(input, true));
+                    holePic = load(fullfile(pwd, 'RNpic.mat'));
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text7.Text = num2str(numel(count.large_holes));
 
-                    RubberStain(input, true);
+                    stainFigs = app.runDetectorWithFigureCapture(@() RubberStain(input, true));
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text8.Text = num2str(numel(count.large_stains));
+
+                    tabFigures = [fingerFigs(:); holeFigs(:); stainFigs(:)];
+                    holeTitles = app.detectorTabTitles('Hole', numel(holeFigs));
+                    if isfield(holePic, 'high_glare_mode') && holePic.high_glare_mode && numel(holeTitles) >= 3
+                        tmpTitle = holeTitles{2};
+                        holeTitles{2} = holeTitles{3};
+                        holeTitles{3} = tmpTitle;
+                    end
+                    tabTitles = [app.detectorTabTitles('Missing Finger', numel(fingerFigs)), ...
+                                 holeTitles, ...
+                                 app.detectorTabTitles('Stains', numel(stainFigs))];
+
+                    app.showFiguresInTabs(tabFigures, tabTitles, 'Run All Steps - Rubber Nitrile');
             end
+        end
+
+        function titles = detectorTabTitles(~, detectorLabel, numFigures)
+            if numFigures <= 0
+                titles = {};
+                return;
+            end
+
+            titles = cell(1, numFigures);
+            titles{1} = sprintf('%s Steps', detectorLabel);
+            if numFigures >= 2
+                titles{2} = sprintf('%s Output', detectorLabel);
+            end
+            for i = 3:numFigures
+                titles{i} = sprintf('%s Extra %d', detectorLabel, i - 2);
+            end
+        end
+
+        function newFigures = runDetectorWithFigureCapture(~, detectorFcn)
+            beforeFigures = findall(0, 'Type', 'figure');
+            detectorFcn();
+            drawnow;
+            afterFigures = findall(0, 'Type', 'figure');
+
+            beforeIds = double(beforeFigures);
+            isNew = ~ismember(double(afterFigures), beforeIds);
+            newFigures = afterFigures(isNew);
+            newFigures = flipud(newFigures);
+        end
+
+        function showFiguresInTabs(~, figureHandles, tabTitles, windowTitle)
+            if isempty(figureHandles)
+                return;
+            end
+
+            if nargin < 4 || isempty(windowTitle)
+                windowTitle = 'Steps and Output - Rubber Nitrile';
+            end
+
+            validMask = arrayfun(@(h) isgraphics(h, 'figure'), figureHandles);
+            figureHandles = figureHandles(validMask);
+            tabTitles = tabTitles(validMask);
+            if isempty(figureHandles)
+                return;
+            end
+
+            tabbedFig = figure('Name', windowTitle, ...
+                               'NumberTitle', 'off', ...
+                               'Position', [80 80 1500 850]);
+            tg = uitabgroup(tabbedFig);
+
+            for i = 1:numel(figureHandles)
+                tab = uitab(tg, 'Title', tabTitles{i});
+                copyobj(allchild(figureHandles(i)), tab);
+            end
+
+            close(figureHandles);
         end
 
 

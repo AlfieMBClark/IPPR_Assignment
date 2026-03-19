@@ -4,7 +4,7 @@ function RubberFinger(input_img, showFigures)
         %hared utilities
         gray_img = GloveDetectionUtils.convertToGrayscale(input_img);
         
-        %CLAHE for lighting normalization
+        %lighting normalization
         gray_img = adapthisteq(gray_img, 'NumTiles', [8 8], 'ClipLimit', 0.02);
         
         blurred_img = GloveDetectionUtils.applyGaussianFilter(gray_img, 4);
@@ -12,9 +12,9 @@ function RubberFinger(input_img, showFigures)
         %HSV
         % Conve to HSV
         hsv_img = rgb2hsv(input_img);
-        H = hsv_img(:,:,1); %Hue
-        S = hsv_img(:,:,2); %Saturation
-        V = hsv_img(:,:,3); %brightness
+        H = hsv_img(:,:,1); 
+        S = hsv_img(:,:,2); 
+        V = hsv_img(:,:,3); 
         
         % Detect Glove
         black_mask = (V < 0.38) & (S < 0.60);
@@ -46,7 +46,6 @@ function RubberFinger(input_img, showFigures)
         % Detect skin
         skin_hue = (H < 0.12) | (H > 0.92);
         skin_mask_main = skin_hue & (S > 0.16) & (S < 0.62) & (V > 0.30) & (V < 0.92);
-        % Include flash-highlighted skin centers that are brighter and less saturated.
         skin_mask_highlight = skin_hue & (S > 0.08) & (S < 0.35) & (V >= 0.70) & (V < 0.98);
         skin_mask = skin_mask_main | skin_mask_highlight;
         skin_mask = medfilt2(skin_mask, [5 5]);
@@ -87,7 +86,6 @@ function RubberFinger(input_img, showFigures)
         edges_dilated = imdilate(edges, SE_edge);
         
         %EXpected Glove shape
-        %convex hull of black glove to get expected complete shape
         expected_glove_shape = bwconvhull(black_mask);
         SE_expand = strel('disk', 15);
         expected_glove_shape = imdilate(expected_glove_shape, SE_expand);
@@ -117,12 +115,10 @@ function RubberFinger(input_img, showFigures)
         RNMF_defect_mask = imopen(RNMF_defect_mask, open);
 
         %DETECT missing finger
-        %skin inside glove region.
+        %skin in glove
         RN_missingfinger = skin_mask & foreground_mask;
 
-        % Orientation-invariant wrist suppression:
-        % estimate hand axis from foreground shape, then identify which end is wrist
-        % by comparing local thickness near each axis extreme.
+        %comparing thickness near each axis
         [fg_y, fg_x] = find(foreground_mask);
         fg_points = [double(fg_x), double(fg_y)];
         fg_center = mean(fg_points, 1);
@@ -147,7 +143,7 @@ function RubberFinger(input_img, showFigures)
         thick_max = mean(fg_dist(end_band_max));
         wrist_is_min_end = thick_min >= thick_max;
 
-        % Reject interior holes using distance to OUTER glove  boundary.
+        % Reject interior holes - dist
         outer_glove_boundary = bwperim(foreground_mask);
         dist_to_outer_boundary = bwdist(outer_glove_boundary);
         edge_distance_threshold = 18;
@@ -178,10 +174,9 @@ function RubberFinger(input_img, showFigures)
                 wrist_proximity = comp_pos_norm;
             end
 
-            % Wrist skin is typically broad and near the thicker hand end.
+            % Wrist skin wide + thick
             wrist_like_component = (wrist_proximity > 0.72) && (comp_area > 350) && (bb_aspect < 2.2);
 
-            % Missing fingers near perimeter
             keep_components(k) = touches_outer_edge_zone && ~is_deep_interior && ~wrist_like_component;
         end
 
@@ -193,25 +188,24 @@ function RubberFinger(input_img, showFigures)
         end
         RN_missingfinger = RN_missingfinger_filtered_components;
         
-        % remove strong edges
+        % remove strong edge
         RN_missingfinger = RN_missingfinger & ~edges_dilated;
-        % Clean noise
         RN_missingfinger = bwareaopen(RN_missingfinger, 200);
         
-        % Dilate to merge nearby detections
+        %merge
         SE_merge = strel('disk', 8);
         RN_missingfinger = imdilate(RN_missingfinger, SE_merge);
-        % Fill holes from dialtonm
+        % Fill holes
         RN_missingfinger = imfill(RN_missingfinger, 'holes');
-        %closing to smooth boundaries
+        %smooth
         SE_close = strel('disk', 5);
         RN_missingfinger = imclose(RN_missingfinger, SE_close);
-        %erosion refine edges
+        %erosion for edge
         SE3 = strel('disk', 2);
         RN_missingfinger = imerode(RN_missingfinger, SE3);
-        % Final fill
+        % fill
         RN_missingfinger = imfill(RN_missingfinger, 'holes');
-        % Detect and filter defects
+        % Detect and filter
         min_finger_area = 2000;
         [LMissingFinger, RN_missingfinger_filtered] = GloveDetectionUtils.detectAndFilterDefects(RN_missingfinger, min_finger_area);
 

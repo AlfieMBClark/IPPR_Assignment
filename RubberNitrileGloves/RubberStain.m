@@ -32,7 +32,7 @@ function RubberStain(input_image, showFigures)
         hsv_img = rgb2hsv(input_image);
         H = hsv_img(:,:,1); S = hsv_img(:,:,2); V = hsv_img(:,:,3);
 
-        % Validate glove type: only run this detector for predominantly black/dark gloves
+        % Validate glove black
         black_mask = (V < 0.38) & (S < 0.60);
         black_mask = medfilt2(black_mask, [5 5]);
         black_mask = imfill(black_mask, 'holes');
@@ -60,9 +60,8 @@ function RubberStain(input_image, showFigures)
             return;
         end
 
-        %detect skin to reject holes
+        %reject holes
         skin_mask = ((H < 0.12) | (H > 0.92)) & (S > 0.16) & (S < 0.70) & (V > 0.18) & (V < 0.90);
-        % Avoid classifying bright low-saturation stain blobs as skin.
         skin_mask = skin_mask & ~((S < 0.28) & (V > 0.66));
         skin_mask = medfilt2(skin_mask, [5 5]);
         skin_mask = bwareaopen(skin_mask & glove_interior, 80);
@@ -70,7 +69,6 @@ function RubberStain(input_image, showFigures)
         %stains are white-ish - I used sun screen :)
         white_mask = (S < 0.35) & (V > 0.62) & glove_interior;
         white_mask = medfilt2(white_mask, [3 3]);
-
         candidate_mask = cavity_candidates & white_mask;
 
         %suppress skin holes + edge
@@ -93,11 +91,11 @@ function RubberStain(input_image, showFigures)
             bb_aspect = max(bb(3), bb(4)) / max(min(bb(3), bb(4)), 1);
             bb_extent = comp_props(1).Area / max(bb(3) * bb(4), 1);
 
-            % Reject thin boundary strips, but allow compact edge stains.
+            % Reject boundary strip allow edge stains.
             boundary_strip_like = touches_boundary && (bb_aspect > 3.0 || bb_extent < 0.30);
             passes_skin_gate = (skin_overlap < 0.12) || strong_white_stain;
 
-            %reject skin and border strips.
+            %reject skin and border 
             keep_comp = (comp_area >= 6) && (mean_v > 0.55) && (mean_s < 0.42) ...
                 && passes_skin_gate && ~boundary_strip_like;
             if keep_comp
@@ -105,10 +103,10 @@ function RubberStain(input_image, showFigures)
             end
         end
 
-        % Detect and filter defects
+        % Detect and filter
         min_stain_area = 6;
         [large_stains, RNS_stain_mask_filtered] = GloveDetectionUtils.detectAndFilterDefects(RNS_stain_mask, min_stain_area);
-        % Save filtered mask
+        % Save
         RNS_stain_mask = RNS_stain_mask_filtered;
         save(fullfile(pwd, 'RNpic.mat'), 'RNS_glove_mask', 'RNS_defect_mask', 'RNS_stain_mask', 'skin_mask');
         save(fullfile(pwd, 'RNvariables.mat'), 'large_stains');
