@@ -96,7 +96,7 @@ classdef GloveDetectionUtils
         
         % Detect connected components and filter by area
         function [defect_props, defect_mask_filtered] = detectAndFilterDefects(defect_mask, min_area)
-            %get connected components
+            %connected components
             cc = bwconncomp(defect_mask);
 
             component_areas = cellfun(@numel, cc.PixelIdxList);
@@ -108,7 +108,7 @@ classdef GloveDetectionUtils
                 defect_mask_filtered(cc.PixelIdxList{keep_idx(i)}) = true;
             end
 
-            % Measure properties from the same filtered mask used for overlay.
+            % Measure properties from filtered mask used for overlay.
             cc_filtered = bwconncomp(defect_mask_filtered);
             defect_props = regionprops(cc_filtered, 'BoundingBox', 'Area');
         end
