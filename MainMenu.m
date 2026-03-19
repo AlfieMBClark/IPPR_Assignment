@@ -37,7 +37,7 @@ function MainMenu()
             addpath(rootDir); 
             latexPath = fullfile(rootDir, 'LatexGloves');
             addpath(latexPath);
-            idkGlove_GUI();
+            Glove_GUI();
             delete(fig);
         catch ME
             uialert(fig, sprintf('Error launching Latex GUI:\n%s', ME.message), 'Error');
