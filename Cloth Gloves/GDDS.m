@@ -205,6 +205,13 @@ function GDDS()
         'Units','pixels','Position',[0 dispH/2-12 dispW 24]);
     pipeData=[];
 
+    % Back button (bottom-right of page area, created after panels so it stays visible)
+    uicontrol('Parent',hFig,'Style','pushbutton',...
+        'String','Back','FontSize',9,'FontWeight','bold',...
+        'ForegroundColor',C.textW,'BackgroundColor',[0.36 0.36 0.42],...
+        'Units','pixels','Position',[dispX+dispW-76 8 72 24],...
+        'Callback',@onBackToMain);
+
     % ── UI Helper Functions ───────────────────────────────────────────────
 
     function sLbl(txt,yy)
@@ -470,6 +477,17 @@ function GDDS()
         end
         set(hPipeHint,'Visible','on');
         set(hBtnPipeNext,'Enable','on'); set(hBtnPipePrev,'Enable','off');
+    end
+
+    function onBackToMain(~,~)
+        try
+            rootDir = fileparts(fileparts(mfilename('fullpath')));
+            addpath(rootDir);
+            MainMenu();
+            close(hFig);
+        catch ME
+            errordlg(sprintf('Error returning to Main Menu:\n%s', ME.message), 'Error');
+        end
     end
 
     % =====================================================================

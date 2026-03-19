@@ -12,6 +12,7 @@ classdef guiNylon < matlab.apps.AppBase
 
         %Controls
         LoadButton      matlab.ui.control.Button
+        BackButton      matlab.ui.control.Button
         RunButton       matlab.ui.control.Button
         ResetButton     matlab.ui.control.Button
         FileLabel       matlab.ui.control.Label
@@ -161,6 +162,18 @@ classdef guiNylon < matlab.apps.AppBase
             app.StatusLabel.FontColor = [0.2 0.2 0.2];
             app.ResultsTextArea.Value = {''};
             app.RunButton.Enable      = false;
+        end
+
+        %Back to main menu
+        function BackButtonPushed(app, ~)
+            try
+                rootDir = fileparts(fileparts(mfilename('fullpath')));
+                addpath(rootDir);
+                MainMenu();
+                delete(app.UIFigure);
+            catch ME
+                uialert(app.UIFigure, sprintf('Error returning to Main Menu:\n%s', ME.message), 'Error');
+            end
         end
 
         %Build UI components
@@ -313,6 +326,16 @@ classdef guiNylon < matlab.apps.AppBase
             app.ResultAxes.Color                = [0.12 0.12 0.15];
             app.ResultAxes.XColor               = 'none';
             app.ResultAxes.YColor               = 'none';
+
+            %Small back button (create last so it stays visible on top)
+            app.BackButton = uibutton(app.UIFigure, 'push');
+            app.BackButton.Position = [1012 12 78 26];
+            app.BackButton.Text = 'Back';
+            app.BackButton.FontSize = 11;
+            app.BackButton.FontWeight = 'bold';
+            app.BackButton.BackgroundColor = [0.40 0.40 0.46];
+            app.BackButton.FontColor = [1 1 1];
+            app.BackButton.ButtonPushedFcn = @(~,~) app.BackButtonPushed();
 
         end
 
