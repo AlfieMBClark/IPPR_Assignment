@@ -1,100 +1,84 @@
 function MainMenu()
-    % MAINMENU - Rubber Nitrile Glove Defect Detection System
-    % Main menu interface for selecting and running different defect detectors
-    
-    clc;
-    
-    % Display welcome banner
-    fprintf('\n========================================\n');
-    fprintf('  RUBBER NITRILE GLOVE DEFECT DETECTOR\n');
-    fprintf('========================================\n\n');
-    
-    % Main menu loop
-    while true
-        fprintf('Select a defect detection method:\n');
-        fprintf('  1. Hole Detection\n');
-        fprintf('  2. Stain Detection\n');
-        fprintf('  3. Missing Finger Detection\n');
-        fprintf('  4. Run All Detectors\n');
-        fprintf('  5. Exit\n\n');
-        
-        choice = input('Enter your choice (1-5): ', 's');
-        
-        switch choice
-            case '1'
-                runHoleDetection();
-            case '2'
-                runStainDetection();
-            case '3'
-                runMissingFingerDetection();
-            case '4'
-                runAllDetectors();
-            case '5'
-                fprintf('\nExiting program. Goodbye!\n\n');
-                break;
-            otherwise
-                fprintf('\nInvalid choice. Please enter a number between 1 and 5.\n\n');
-        end
-    end
-end
+    % MAINMENU - Glove type selection GUI
+    % Opens a launcher page with glove material choices.
 
-function runHoleDetection()
-    fprintf('\n--- Hole Detection ---\n');
-    img = selectImage();
-    if ~isempty(img)
-        fprintf('Running hole detection...\n');
-        RubberHole(img);
-        fprintf('Results displayed and saved to RNpic.mat and RNvariables.mat\n\n');
-    end
-end
+    fig = uifigure('Name', 'Glove Detection - Main Menu', ...
+                   'Position', [500 220 600 430], ...
+                   'Color', [0.96 0.97 0.99]);
 
-function runStainDetection()
-    fprintf('\n--- Stain Detection ---\n');
-    img = selectImage();
-    if ~isempty(img)
-        fprintf('Running stain detection...\n');
-        RubberStain(img);
-        fprintf('Results displayed and saved to RNpic.mat and RNvariables.mat\n\n');
-    end
-end
+    uilabel(fig, ...
+            'Text', 'Select Glove Type', ...
+            'FontSize', 28, ...
+            'FontWeight', 'bold', ...
+            'FontColor', [0.08 0.23 0.45], ...
+            'HorizontalAlignment', 'center', ...
+            'Position', [160 355 280 42]);
 
-function runMissingFingerDetection()
-    fprintf('\n--- Missing Finger Detection ---\n');
-    img = selectImage();
-    if ~isempty(img)
-        fprintf('Running missing finger detection...\n');
-        RubberFinger(img);
-        fprintf('Results displayed and saved to RNpic.mat and RNvariables.mat\n\n');
-    end
-end
+    uilabel(fig, ...
+            'Text', 'Choose a glove material to continue', ...
+            'FontSize', 14, ...
+            'FontColor', [0.33 0.37 0.42], ...
+            'HorizontalAlignment', 'center', ...
+            'Position', [165 326 270 24]);
 
-function runAllDetectors()
-    fprintf('\n--- Running All Detectors ---\n');
-    img = selectImage();
-    if ~isempty(img)
-        fprintf('Running hole detection...\n');
-        RubberHole(img);
-        
-        fprintf('Running stain detection...\n');
-        RubberStain(img);
-        
-        fprintf('Running missing finger detection...\n');
-        RubberFinger(img);
-        
-        fprintf('All detections complete. Results displayed and saved to RNpic.mat and RNvariables.mat\n\n');
-    end
-end
+    btnW = 210;
+    btnH = 56;
+    x1 = 95;
+    x2 = 295;
+    y1 = 220;
+    y2 = 140;
 
-function img = selectImage()
-    % Helper function to select and load an image
-    [fname, pname] = uigetfile({'*.jpg;*.jpeg;*.png;*.bmp;*.tif', 'Image Files (*.jpg,*.png,*.bmp,*.tif)'; '*.*', 'All Files'}, ...
-                                'Select a Rubber Nitrile Glove Image');
-    
-    if isequal(fname, 0)
-        fprintf('Image selection cancelled.\n\n');
-        img = [];
-    else
-        img = imread(fullfile(pname, fname));
-        fprintf('Loaded image: %s\n', fname);
+    uibutton(fig, 'push', ...
+             'Text', 'Rubber Nitrile', ...
+             'FontSize', 16, ...
+             'FontWeight', 'bold', ...
+             'BackgroundColor', [0.09 0.60 0.99], ...
+             'FontColor', [1 1 1], ...
+             'Position', [x1 y1 btnW btnH], ...
+             'ButtonPushedFcn', @openRubberNitrile);
+
+    uibutton(fig, 'push', ...
+             'Text', 'Latex', ...
+             'FontSize', 16, ...
+             'FontWeight', 'bold', ...
+             'BackgroundColor', [0.31 0.56 0.78], ...
+             'FontColor', [1 1 1], ...
+             'Position', [x2 y1 btnW btnH], ...
+             'ButtonPushedFcn', @(~,~)showComingSoon('Latex'));
+
+    uibutton(fig, 'push', ...
+             'Text', 'Nylon', ...
+             'FontSize', 16, ...
+             'FontWeight', 'bold', ...
+             'BackgroundColor', [0.25 0.50 0.72], ...
+             'FontColor', [1 1 1], ...
+             'Position', [x1 y2 btnW btnH], ...
+             'ButtonPushedFcn', @(~,~)showComingSoon('Nylon'));
+
+    uibutton(fig, 'push', ...
+             'Text', 'Cotton', ...
+             'FontSize', 16, ...
+             'FontWeight', 'bold', ...
+             'BackgroundColor', [0.28 0.53 0.75], ...
+             'FontColor', [1 1 1], ...
+             'Position', [x2 y2 btnW btnH], ...
+             'ButtonPushedFcn', @(~,~)showComingSoon('Cotton'));
+
+    uibutton(fig, 'push', ...
+             'Text', 'Close', ...
+             'FontSize', 13, ...
+             'BackgroundColor', [1 0 0], ...
+             'FontColor', [1 1 1], ...
+             'Position', [255 48 90 32], ...
+             'ButtonPushedFcn', @(~,~)delete(fig));
+
+    function openRubberNitrile(~, ~)
+        % Launch existing App Designer GUI for Rubber Nitrile pipeline.
+        delete(fig);
+        RubberNutrile_GUI_exported();
+    end
+
+    function showComingSoon(gloveType)
+        uialert(fig, sprintf('%s module is not connected yet.', gloveType), 'Coming Soon');
     end
 end

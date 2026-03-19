@@ -141,7 +141,7 @@ classdef GloveDetectionUtils
         end
         
         % Merge nearby detections dilation + erosion
-        function mergeCloseRegions(binary_mask, dilate_radius, erode_radius)
+        function merged = mergeCloseRegions(binary_mask, dilate_radius, erode_radius)
             if nargin < 2, dilate_radius = 8; end
             if nargin < 3, erode_radius = 2; end
             

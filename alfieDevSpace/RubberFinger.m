@@ -1,4 +1,4 @@
-function RubberNitrileMissingFingerDetector(input_img, showFigures)
+function RubberFinger(input_img, showFigures)
     if nargin < 2, showFigures = true; end
     try
         %hared utilities

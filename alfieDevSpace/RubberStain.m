@@ -1,4 +1,4 @@
-function RubberNitrileStainDetector(input_image, showFigures)
+function RubberStain(input_image, showFigures)
     if nargin < 2, showFigures = true; end
     try
         % Preprocessing w shared utilities

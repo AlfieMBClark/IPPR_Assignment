@@ -73,8 +73,9 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
 
         % back btn
         function backButtonPushed(app, event)
-            % Close this GUI
+            % Close this GUI and return to the main menu page
             delete(app);
+            MainMenu();
         end
 
         %Detect btn
