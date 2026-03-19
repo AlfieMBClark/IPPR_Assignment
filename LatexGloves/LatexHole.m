@@ -1,31 +1,19 @@
 function LatexHole(input_img, showFigures)
-% LATEXHOLE - Detect holes in a red latex glove
-%
-% Pipeline (same logic as foreign object detector):
-%   1. Grayscale + median filter
-%   2. HSV conversion
-%   3. Separate background from hand+glove
-%   4. Extract red glove from hand+glove region
-%   5. Subtract: filled glove shape - red glove = holes
-%   6. Confirm holes must show skin underneath
-input_img = imread("./Latex Glove/ContamwHole.jpeg");
-
     if nargin < 2, showFigures = true; end
 
     try
-        %% ── STEP 1: GRAYSCALE + MEDIAN FILTER ───────────────────────────
+        %% GRAYSCALE + MEDIAN FILTER
         gray_img     = GloveDetectionUtils.convertToGrayscale(input_img);
         filtered_img = GloveDetectionUtils.applyMedianFilter(gray_img, [5 5]);
 
-        %% ── STEP 2: HSV ──────────────────────────────────────────────────
+        %% HSV
         hsv_img = rgb2hsv(input_img);
         H = hsv_img(:,:,1);
         S = hsv_img(:,:,2);
         V = hsv_img(:,:,3);
 
-        %% ── STEP 3: SEPARATE BACKGROUND FROM HAND+GLOVE ─────────────────
-        % Background = white/grey = low saturation + high brightness
-        background_mask = (S < 0.15) & (V > 0.55);           % ← TUNE
+        %% SEPARATE BACKGROUND FROM HAND+GLOVE
+        background_mask = (S < 0.15) & (V > 0.55);
         background_mask = bwareaopen(background_mask, 3000);
         background_mask = bwareafilt(background_mask, 1);
 
@@ -35,75 +23,53 @@ input_img = imread("./Latex Glove/ContamwHole.jpeg");
         hand_glove_region = bwareafilt(hand_glove_region, 1);
         hand_glove_region = imfill(hand_glove_region, 'holes');
 
-        %% ── STEP 4: EXTRACT RED GLOVE ────────────────────────────────────
-        % Within hand+glove, find what is red latex
-        is_red_glove = ((H < 0.05) | (H > 0.92)) & ...       % ← TUNE hue
-                       (S > 0.50) & ...                       % ← TUNE saturation
-                       (V > 0.10) & (V < 0.95) & ...         % ← TUNE brightness
+        %% EXTRACT THE GLOVE
+        is_red_glove = ((H < 0.05) | (H > 0.92)) & ...
+                       (S > 0.50) & ...
+                       (V > 0.10) & (V < 0.95) & ...
                        hand_glove_region;
 
         is_red_glove = medfilt2(is_red_glove, [5 5]);
         is_red_glove = bwareaopen(is_red_glove, 500);
         is_red_glove = bwareafilt(is_red_glove, 1);
 
-        % Fill glove to solid shape — this is what the glove SHOULD look like
+        % FINDING THE GLOVE
         glove_filled = imfill(is_red_glove, 'holes');
         glove_filled = GloveDetectionUtils.extractGloveMask(glove_filled, 3);
         glove_filled = glove_filled & ~background_mask;
 
-        %% ── STEP 5: SUBTRACT TO FIND HOLES ──────────────────────────────
-        % Key idea:
-        %   glove_filled   = what the glove looks like if it were complete
-        %   is_red_glove   = what the glove actually looks like
-        %   difference     = regions inside the glove shape that are NOT red
-        %                  = holes + foreign objects
-        %
+        %% SUBTRACT TO FIND HOLES
         % We then use skin detection to keep only HOLES
         % (holes reveal skin, foreign objects do not)
 
         glove_gaps = glove_filled & ~is_red_glove;            % everything missing from glove
 
-        %% ── STEP 6: SKIN CONFIRMATION ────────────────────────────────────
-        % A hole must show skin underneath.
-        % Foreign objects (plastic, rubber band) are also gaps but show
-        % non-skin colours — skin confirmation separates them from holes.
-        skin_mask = ((H < 0.10) | (H > 0.92)) & ...          % ← TUNE: tighter hue, less overlap with red glove
-                    (S > 0.15) & (S < 0.55) & ...            % ← TUNE: tighter saturation
-                    (V > 0.30) & (V < 0.88);                 % ← TUNE: exclude very dark shadows
+        %% SKIN DETECTION
+        skin_mask = ((H < 0.10) | (H > 0.92)) & ...
+                    (S > 0.15) & (S < 0.55) & ...         
+                    (V > 0.30) & (V < 0.88);            
 
         skin_mask = medfilt2(skin_mask, [5 5]);
         skin_mask = bwareaopen(skin_mask, 200);
-        % Dilate skin mask to account for edge blurring around hole boundary
-        skin_mask = imdilate(skin_mask, strel('disk', 15));   % ← TUNE dilation
+
+        % Dilate skin mask for edge blurring around hole boundary
+        skin_mask = imdilate(skin_mask, strel('disk', 15));
 
         % Erode glove filled inward to get strict interior only
-        % Fingertip and palm edge gaps are near the boundary — exclude them
-        % Real holes are always well inside the glove, not at the edges
-        glove_strict_interior = imerode(glove_filled, strel('disk', 20)); % ← TUNE: larger = stricter interior
+        glove_strict_interior = imerode(glove_filled, strel('disk', 20));
 
-        % Hole = gap in glove interior that overlaps with skin
+        % Hole is the gap in glove interior that overlaps with the skin
         % Gaps at edges/fingertips are excluded by strict interior mask
         hole_mask = glove_gaps & skin_mask & glove_strict_interior;
 
-        %% ── STEP 7: CLEANUP ──────────────────────────────────────────────
-        hole_mask = bwareaopen(hole_mask, 80);                 % ← TUNE min hole size
-        hole_mask = imdilate(hole_mask, strel('disk', 8));    % merge nearby fragments
+        %% CLEANING
+        hole_mask = bwareaopen(hole_mask, 80);           
+        hole_mask = imdilate(hole_mask, strel('disk', 8));   
         hole_mask = imfill(hole_mask, 'holes');
         hole_mask = imclose(hole_mask, strel('disk', 6));
-        hole_mask = bwareaopen(hole_mask, 150);                % ← TUNE final min size
+        hole_mask = bwareaopen(hole_mask, 150);               
 
-        %% ── STEP 7B: WRINKLE / SHADOW REJECTION ─────────────────────────
-        % Wrinkles and fold shadows appear as thin curved lines in the mask.
-        % Real holes are compact solid blobs.
-        % We use two shape properties to separate them:
-        %
-        %   Solidity   = Area / ConvexArea
-        %                wrinkles are thin = low solidity (< 0.5)
-        %                holes are solid   = high solidity (> 0.5)
-        %
-        %   Extent     = Area / BoundingBoxArea
-        %                wrinkles are elongated = low extent
-        %                holes fill their bbox  = higher extent
+        %% WRINKLE / SHADOW REJECTION
 
         cc    = bwconncomp(hole_mask);
         props = regionprops(cc, 'Area', 'Solidity', 'Extent', ...
@@ -111,29 +77,28 @@ input_img = imread("./Latex Glove/ContamwHole.jpeg");
 
         hole_mask_clean = false(size(hole_mask));
         for i = 1:numel(props)
-            % Reject thin/elongated shapes (wrinkles, fold lines)
-            if props(i).Solidity < 0.45,  continue; end      % ← TUNE: lower = stricter
-            if props(i).Extent   < 0.25,  continue; end      % ← TUNE: lower = stricter
-            if props(i).Area     < 150,   continue; end      % ← TUNE: min hole size
+            % Reject thin/elongated shapes (wrinkles or fold lines)
+            if props(i).Solidity < 0.45,  continue; end
+            if props(i).Extent   < 0.25,  continue; end      
+            if props(i).Area     < 150,   continue; end      
 
             hole_mask_clean(props(i).PixelIdxList) = true;
         end
 
         hole_mask = hole_mask_clean;
 
-        %% ── STEP 8: SAVE + DETECT ────────────────────────────────────────
         RNH_hole = hole_mask;
         save(fullfile(pwd, 'RNpic.mat'), ...
             'is_red_glove', 'glove_filled', 'glove_gaps', ...
             'skin_mask', 'RNH_hole');
 
-        min_hole_area = 150;                                   % ← TUNE
+        min_hole_area = 150;
         [large_holes, hole_mask_filtered] = ...
             GloveDetectionUtils.detectAndFilterDefects(RNH_hole, min_hole_area);
 
         save(fullfile(pwd, 'RNvariables.mat'), 'large_holes');
 
-        %% ── STEP 9: DISPLAY ─────────────────────────────────────────────
+% DISPLAY
         if showFigures
             figure('Name', 'Hole Detection', ...
                    'NumberTitle', 'off', ...

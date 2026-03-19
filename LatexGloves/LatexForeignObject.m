@@ -7,7 +7,6 @@ function LatexForeignObject(input_img, showFigures)
 %   3. Separate background from hand+glove
 %   4. Extract red glove from the hand+glove region
 %   5. Anything not red glove within the hand+glove = foreign object
-input_img = imread("./Latex Glove/ForeignObject.jpeg");
 
     if nargin < 2, showFigures = true; end
 

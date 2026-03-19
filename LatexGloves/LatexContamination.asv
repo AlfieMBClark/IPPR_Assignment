@@ -1,5 +1,5 @@
 function LatexContamination(input_img, showFigures)
-
+% RUBBERCONTAMINATION - Detect dirt/contamination on a red latex glove
 %
 % Workflow:
 %   1. Build glove mask + safe search zone (same shadow exclusion as foreign object)
