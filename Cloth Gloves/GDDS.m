@@ -1,4 +1,4 @@
-function GloveDefectDetectionGUI()
+function GDDS()
 % =========================================================================
 %  GLOVE DEFECT DETECTION SYSTEM  v3  — Tri-Mask Segmentation Edition
 %  CT036-3-IPPR | Asia Pacific University of Technology & Innovation
