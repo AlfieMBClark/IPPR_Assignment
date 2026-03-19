@@ -1,4 +1,4 @@
-classdef RubberNitrile_GUI_exported < matlab.apps.AppBase
+classdef RubberNitrile_GUI < matlab.apps.AppBase
 
     % mask toggle
     properties (Access = private)
@@ -579,7 +579,7 @@ classdef RubberNitrile_GUI_exported < matlab.apps.AppBase
     end
 
     methods (Access = public)
-        function app = RubberNitrile_GUI_exported
+        function app = RubberNitrile_GUI
             createComponents(app)
             registerApp(app, app.UIFigure)
             if nargout == 0
