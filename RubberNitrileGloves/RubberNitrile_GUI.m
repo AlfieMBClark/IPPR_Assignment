@@ -80,7 +80,7 @@ classdef RubberNitrile_GUI < matlab.apps.AppBase
 
         %Detect btn
         function DetectButton3ButtonPushed(app, event)
-            input = getimage(app.axes1);
+            input = app.getInputImageForProcessing();
             if isempty(input)
                 uialert(app.UIFigure, 'Please load an image first.', 'No Image');
                 return;
@@ -129,10 +129,15 @@ classdef RubberNitrile_GUI < matlab.apps.AppBase
                     count = load(fullfile(pwd, 'RNvariables.mat'));
                     app.text8.Text = num2str(numel(count.large_stains));
                     imshow(input, 'Parent', app.axes1, 'InitialMagnification', 'fit');
+                    hold(app.axes1, 'on');
                     for i = 1:numel(count.large_stains)
                         bbox = count.large_stains(i).BoundingBox;
                         rectangle(app.axes1, 'Position', bbox, 'EdgeColor', [0.2 0.9 1], 'LineWidth', 2);
+                        text(app.axes1, bbox(1), bbox(2) - 8, sprintf('Stain %d', i), ...
+                             'Color', [0 0.5 0.8], 'FontSize', 10, 'FontWeight', 'bold', ...
+                             'BackgroundColor', 'white', 'Margin', 2);
                     end
+                    hold(app.axes1, 'off');
 
                 case 'Run all'
                     % Missing Finger
@@ -350,7 +355,7 @@ classdef RubberNitrile_GUI < matlab.apps.AppBase
 
         %swho steps btn
         function ShowStepsButtonPushed(app, event)
-            input = getimage(app.axes1);
+            input = app.getInputImageForProcessing();
             if isempty(input)
                 uialert(app.UIFigure, 'Please load an image first.', 'No Image');
                 return;
@@ -426,6 +431,15 @@ classdef RubberNitrile_GUI < matlab.apps.AppBase
             end
             for i = 3:numFigures
                 titles{i} = sprintf('%s Extra %d', detectorLabel, i - 2);
+            end
+        end
+
+        function input = getInputImageForProcessing(app)
+            % Always process the original image, not the currently displayed mask overlay.
+            if app.MaskVisible && ~isempty(app.OriginalImage)
+                input = app.OriginalImage;
+            else
+                input = getimage(app.axes1);
             end
         end
 
