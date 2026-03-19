@@ -44,7 +44,7 @@ function MainMenu()
              'BackgroundColor', [0.31 0.56 0.78], ...
              'FontColor', [1 1 1], ...
              'Position', [x2 y1 btnW btnH], ...
-             'ButtonPushedFcn', @(~,~)showComingSoon('Latex'));
+             'ButtonPushedFcn', @openLatex);
 
     uibutton(fig, 'push', ...
              'Text', 'Nylon', ...
@@ -74,8 +74,36 @@ function MainMenu()
 
     function openRubberNitrile(~, ~)
         % Launch existing App Designer GUI for Rubber Nitrile pipeline.
-        delete(fig);
-        RubberNutrile_GUI_exported();
+        try
+            % Add parent and RubberNitrileGloves folders to path
+            addpath(pwd);  % Parent directory for shared utilities
+            rubberPath = fullfile(pwd, 'RubberNitrileGloves');
+            addpath(rubberPath);
+            % Create and display the app
+            app = RubberNitrile_GUI_exported();
+            % Delete main menu after GUI is created
+            delete(fig);
+        catch ME
+            % If error occurs, show it
+            uialert(fig, sprintf('Error launching Rubber Nitrile GUI:\n%s', ME.message), 'Error');
+        end
+    end
+
+    function openLatex(~, ~)
+        % Launch App Designer GUI for Latex pipeline.
+        try
+            % Add parent and LatexGloves folders to path
+            addpath(pwd);  % Parent directory for shared utilities
+            latexPath = fullfile(pwd, 'LatexGloves');
+            addpath(latexPath);
+            % Create and display the app
+            app = idkGlove_GUI();
+            % Delete main menu after GUI is created
+            delete(fig);
+        catch ME
+            % If error occurs, show it
+            uialert(fig, sprintf('Error launching Latex GUI:\n%s', ME.message), 'Error');
+        end
     end
 
     function showComingSoon(gloveType)

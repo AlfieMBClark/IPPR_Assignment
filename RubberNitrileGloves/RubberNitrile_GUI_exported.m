@@ -1,4 +1,4 @@
-classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
+classdef RubberNitrile_GUI_exported < matlab.apps.AppBase
 
     % mask toggle
     properties (Access = private)
@@ -46,7 +46,7 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
             app.pushbutton6.Text = 'Show Masks';
             app.pushbutton6.BackgroundColor = [0.0745 0.6235 1];
 
-            [File_Name, Path_Name] = uigetfile({'*.jpg;*.png;*.bmp;*.tif', 'Image Files (*.jpg, *.png, *.bmp, *.tif)'}, 'Select image');
+            [File_Name, Path_Name] = uigetfile({'*.jpg;*.png;*.bmp;*.tif;*.jpeg', 'Image Files (*.jpg, *.png, *.bmp, *.tif, *.jpeg)'}, 'Select image');
             if isequal(File_Name, 0)
                 return;
             end
@@ -377,7 +377,6 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
             end
         end
 
-        % Value changed function: popupmenu1
         function popupmenu1ValueChanged(app, event)
         end
     end
@@ -579,7 +578,7 @@ classdef RubberNutrile_GUI_exported < matlab.apps.AppBase
     end
 
     methods (Access = public)
-        function app = RubberNutrile_GUI_exported
+        function app = RubberNitrile_GUI_exported
             createComponents(app)
             registerApp(app, app.UIFigure)
             if nargout == 0

@@ -32,6 +32,34 @@ function RubberStain(input_image, showFigures)
         hsv_img = rgb2hsv(input_image);
         H = hsv_img(:,:,1); S = hsv_img(:,:,2); V = hsv_img(:,:,3);
 
+        % Validate glove type: only run this detector for predominantly black/dark gloves.
+        black_mask = (V < 0.3) & (S < 0.5);
+        black_mask = medfilt2(black_mask, [5 5]);
+        black_mask = imfill(black_mask, 'holes');
+        black_mask = bwareaopen(black_mask, 500);
+        black_mask = bwareafilt(black_mask, 1);
+
+        non_background_mask = ~((S < 0.15) & (V > 0.5) & (V < 0.95));
+        non_background_pixels = max(1, nnz(non_background_mask));
+        black_coverage = nnz(black_mask & non_background_mask) / non_background_pixels;
+        if black_coverage < 0.22
+            RNS_glove_mask = false(size(V));
+            RNS_defect_mask = false(size(V));
+            RNS_stain_mask = false(size(V));
+            skin_mask = false(size(V));
+            large_stains = struct('BoundingBox', {}, 'Area', {});
+
+            save(fullfile(pwd, 'RNpic.mat'), 'RNS_glove_mask', 'RNS_defect_mask', 'RNS_stain_mask', 'skin_mask');
+            save(fullfile(pwd, 'RNvariables.mat'), 'large_stains');
+
+            if showFigures
+                figure('Name', 'Rubber Nitrile Stain Detection', 'NumberTitle', 'off');
+                imshow(input_image);
+                title(sprintf('Defect not Detected for this type of glove'));
+            end
+            return;
+        end
+
         %detect skin to reject holes
         skin_mask = ((H < 0.12) | (H > 0.92)) & (S > 0.16) & (S < 0.70) & (V > 0.18) & (V < 0.90);
         skin_mask = medfilt2(skin_mask, [5 5]);

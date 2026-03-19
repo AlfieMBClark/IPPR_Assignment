@@ -3,6 +3,10 @@ function RubberFinger(input_img, showFigures)
     try
         %hared utilities
         gray_img = GloveDetectionUtils.convertToGrayscale(input_img);
+        
+        % Apply CLAHE for lighting normalization - makes code robust to different lighting
+        gray_img = adapthisteq(gray_img, 'NumTiles', [8 8], 'ClipLimit', 0.02);
+        
         blurred_img = GloveDetectionUtils.applyGaussianFilter(gray_img, 4);
 
         %HSV
@@ -19,8 +23,27 @@ function RubberFinger(input_img, showFigures)
         black_mask = bwareaopen(black_mask, 500);
         black_mask = bwareafilt(black_mask, 1); % Get largest
         
+        non_background_mask = ~((S < 0.15) & (V > 0.5) & (V < 0.95));
+        non_background_pixels = max(1, nnz(non_background_mask));
+        black_coverage = nnz(black_mask & non_background_mask) / non_background_pixels;
+        if black_coverage < 0.22
+            RN_missingfinger = false(size(V));
+            LMissingFinger = struct('BoundingBox', {}, 'Area', {});
+            background_mask = ~non_background_mask;
+            foreground_mask = false(size(V));
+            skin_mask = false(size(V));
+            save(fullfile(pwd, 'RNpic.mat'), 'black_mask', 'skin_mask', 'background_mask', 'foreground_mask', 'RN_missingfinger');
+            save(fullfile(pwd, 'RNvariables.mat'), 'LMissingFinger');
+            if showFigures
+                figure('Name', 'Rubber Nitrile Missing Finger Detection', 'NumberTitle', 'off');
+                imshow(input_img);
+                title(sprintf('Skipped: Defect not Detected for this type of glove'));
+            end
+            return;
+        end
+        
         % Detect skin
-        skin_mask = ((H < 0.12) | (H > 0.92)) & (S > 0.15) & (S < 0.6) & (V > 0.3) & (V < 0.85);
+        skin_mask = ((H < 0.12) | (H > 0.92)) & (S > 0.25) & (S < 0.50) & (V > 0.35) & (V < 0.75);
         skin_mask = medfilt2(skin_mask, [5 5]);
         skin_mask = bwareaopen(skin_mask, 500);
         
