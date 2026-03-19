@@ -15,7 +15,7 @@ function MainMenu()
     %btns
     uibutton(fig, 'push', 'Text', 'Rubber Nitrile', 'FontSize', 16, 'FontWeight', 'bold', 'BackgroundColor', [0.10 0.10 0.10], 'FontColor', [1 1 1], 'Position', [x1 y1 btnW btnH], 'ButtonPushedFcn', @openRubberNitrile);
     uibutton(fig, 'push', 'Text', 'Latex', 'FontSize', 16, 'FontWeight', 'bold', 'BackgroundColor', [0.86 0.18 0.18], 'FontColor', [1 1 1], 'Position', [x2 y1 btnW btnH], 'ButtonPushedFcn', @openLatex);
-    uibutton(fig, 'push', 'Text', 'Nylon', 'FontSize', 16, 'FontWeight', 'bold', 'BackgroundColor', [0.12 0.42 0.90], 'FontColor', [1 1 1], 'Position', [x1 y2 btnW btnH], 'ButtonPushedFcn', @(~,~)showComingSoon('Nylon'));
+    uibutton(fig, 'push', 'Text', 'Nylon', 'FontSize', 16, 'FontWeight', 'bold', 'BackgroundColor', [0.12 0.42 0.90], 'FontColor', [1 1 1], 'Position', [x1 y2 btnW btnH], 'ButtonPushedFcn', @openNylon);
     uibutton(fig, 'push', 'Text', 'Cloth', 'FontSize', 16, 'FontWeight', 'bold', 'BackgroundColor', [1 1 1], 'FontColor', [0.10 0.10 0.10], 'Position', [x2 y2 btnW btnH], 'ButtonPushedFcn', @openCloth);
     uibutton(fig, 'push', 'Text', 'Close', 'FontSize', 13, 'BackgroundColor', [1 0 0], 'FontColor', [1 1 1], 'Position', [255 48 90 32], 'ButtonPushedFcn', @(~,~)delete(fig));
 
@@ -56,7 +56,16 @@ function MainMenu()
         end
     end
 
-    function showComingSoon(gloveType)
-        uialert(fig, sprintf('%s module is not connected yet.', gloveType), 'Coming Soon');
+    function openNylon(~, ~)
+        try
+            addpath(rootDir);
+            nylonPath = fullfile(rootDir, 'Nylon Glove');
+            addpath(nylonPath);
+            guiNylon();
+            delete(fig);
+        catch ME
+            uialert(fig, sprintf('Error launching Nylon GUI:\n%s', ME.message), 'Error');
+        end
     end
+
 end
