@@ -35,8 +35,8 @@ function RubberHole(image, showFigures)
         filledImg = bwareafilt(filledImg, 1);
         filledImg = imerode(filledImg, strel('disk', 1));
 
-        % Fallback path: if thresholding is too weak for this image, derive a mask
-        % from local-std texture edges and keep only the largest region.
+        %if thresholding weak
+        % mask frm local-std texture edges - keep largest region.
         if ~any(filledImg(:))
             std_thresh = std_normalized > 0.08;
             std_thresh = bwareaopen(std_thresh, 200);
@@ -108,7 +108,7 @@ function RubberHole(image, showFigures)
         texture_holes = bwareaopen(texture_holes, 12);
         combined_holes = cavity_holes | texture_holes;
 
-        % High-glare - derive candidates from enclosed local std-dev regions
+        % High-glare - candidates from enclosed local std-dev
         % overlap bright binarized glove pixels AND skin-like areas.
         if high_glare_mode
             std_vals = std_normalized(glove_interior_for_glare);

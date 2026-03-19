@@ -15,7 +15,7 @@ function RubberStain(input_image, showFigures)
         % Fill holes binary img
         filled_image = imfill(inverted_binary_image, 'holes');
 
-        % Glove masky
+        % Glove mask
         RNS_glove_mask = GloveDetectionUtils.extractGloveMask(filled_image, 1);
 
         neighborhood = ones(5);
@@ -96,8 +96,7 @@ function RubberStain(input_image, showFigures)
             passes_skin_gate = (skin_overlap < 0.12) || strong_white_stain;
 
             %reject skin and border 
-            keep_comp = (comp_area >= 6) && (mean_v > 0.55) && (mean_s < 0.42) ...
-                && passes_skin_gate && ~boundary_strip_like;
+            keep_comp = (comp_area >= 6) && (mean_v > 0.55) && (mean_s < 0.42) && passes_skin_gate && ~boundary_strip_like;
             if keep_comp
                 RNS_stain_mask = RNS_stain_mask | comp;
             end
