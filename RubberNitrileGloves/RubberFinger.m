@@ -3,10 +3,8 @@ function RubberFinger(input_img, showFigures)
     try
         %hared utilities
         gray_img = GloveDetectionUtils.convertToGrayscale(input_img);
-        
         %lighting normalization
         gray_img = adapthisteq(gray_img, 'NumTiles', [8 8], 'ClipLimit', 0.02);
-        
         blurred_img = GloveDetectionUtils.applyGaussianFilter(gray_img, 4);
 
         %HSV
