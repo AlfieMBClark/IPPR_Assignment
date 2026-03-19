@@ -518,7 +518,7 @@ classdef RubberNitrile_GUI < matlab.apps.AppBase
             app.text2.FontWeight = 'bold';
             app.text2.FontColor = [0.0745 0.6235 1];
             app.text2.Position = [19 618 406 45];
-            app.text2.Text = 'Rubber Nutrile Gloves';
+            app.text2.Text = 'Rubber Nitrile Gloves';
 
             %applydefect
             app.pushbutton3 = uibutton(app.uipanel1, 'push');
