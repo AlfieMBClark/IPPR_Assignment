@@ -1,0 +1,253 @@
+function RubberForeignObject(input_img, showFigures)
+% RUBBERFOREIGNOBJECT - Detect foreign objects on a red latex glove
+%
+% Each path detects, marks, and boxes its objects INDEPENDENTLY.
+% Boxes are decided at detection time — final mask is display-only.
+% Paths never merge into e
+    if nargin < 2, showFigures = true; end
+
+    tryach other, preventing overlap false positives.
+input_img = imread("./Latex Glove/ForeignObject.jpeg");
+
+        %% ── STEP 1: PREPROCESS ───────────────────────────────────────────
+        gray_img     = GloveDetectionUtils.convertToGrayscale(input_img);
+        filtered_img = GloveDetectionUtils.applyMedianFilter(gray_img, [5 5]);
+
+        hsv_img = rgb2hsv(input_img);
+        H = hsv_img(:,:,1);
+        S = hsv_img(:,:,2);
+        V = hsv_img(:,:,3);
+
+        [img_h, img_w, ~] = size(input_img);
+
+        %% ── STEP 2: BACKGROUND ───────────────────────────────────────────
+        background_mask = (S < 0.15) & (V > 0.55);
+        background_mask = bwareaopen(background_mask, 3000);
+        background_mask = bwareafilt(background_mask, 1);
+
+        %% ── STEP 3: RED GLOVE MASKS ──────────────────────────────────────
+        % glove_red_raw  = unfilled, used for PATH A detection
+        % glove_filled   = solid shape, used only for zone definitions
+        glove_red_raw = ((H < 0.05) | (H > 0.92)) & ...
+                        (S > 0.50) & (V > 0.10) & (V < 0.95) & ...
+                        ~background_mask;
+        glove_red_raw = medfilt2(glove_red_raw, [5 5]);
+        glove_red_raw = bwareaopen(glove_red_raw, 1000);
+        glove_red_raw = bwareafilt(glove_red_raw, 1);
+
+        glove_filled = imfill(glove_red_raw, 'holes');
+        glove_filled = GloveDetectionUtils.extractGloveMask(glove_filled, 5);
+        glove_filled = glove_filled & ~background_mask;
+
+        %% ── STEP 4: ZONES (shadow ruled out purely by zone exclusion) ────
+        shadow_guard  = glove_filled & ~imerode(glove_filled, strel('disk', 14)); % ← TUNE
+        safe_interior = glove_filled & ~shadow_guard & ~background_mask;
+
+        convex_hull = bwconvhull(glove_filled);
+        hull_gap    = (convex_hull & ~glove_filled) & ~background_mask;
+        clip_zone   = imdilate(hull_gap, strel('disk', 20)) | safe_interior;
+        clip_zone   = clip_zone & ~background_mask;
+        near_glove  = imdilate(glove_filled, strel('disk', 25)) & ~background_mask;
+
+        %% ══════════════════════════════════════════════════════════════════
+        %  PATH A — WHITE PLASTIC STRIPS
+        %  Marked immediately after detection. Never touches other paths.
+        %% ══════════════════════════════════════════════════════════════════
+
+        is_red    = ((H < 0.10) | (H > 0.90)) & (S > 0.30);
+        plastic_A = ~is_red & (V > 0.55) & (S < 0.50) & ...
+                    safe_interior & ~glove_red_raw;         % ← not red glove pixels
+
+        plastic_A = medfilt2(plastic_A, [3 3]);
+        plastic_A = bwareaopen(plastic_A, 60);              % ← TUNE
+        plastic_A = imclose(plastic_A, strel('disk', 5));
+        plastic_A = imfill(plastic_A, 'holes');
+        plastic_A = bwareaopen(plastic_A, 100);             % ← TUNE
+
+        % ── Mark PATH A here, before anything else runs ───────────────────
+        cc_A   = bwconncomp(plastic_A);
+        props_A = regionprops(cc_A, 'BoundingBox', 'Area');
+        props_A = props_A([props_A.Area] >= 100);           % ← TUNE min area
+
+        %% ══════════════════════════════════════════════════════════════════
+        %  PATH B — ORANGE RUBBER BAND
+        %  Marked immediately. Cannot overlap with Path A or C detections.
+        %% ══════════════════════════════════════════════════════════════════
+
+        orange_raw = (H >= 0.04) & (H <= 0.13) & ...       % ← TUNE hue
+                     (S > 0.50) & (V > 0.30) & (V < 0.95) & ...
+                     ~background_mask & near_glove;
+        orange_raw    = medfilt2(orange_raw, [3 3]);
+        orange_raw    = bwareaopen(orange_raw, 40);
+
+        rubber_band_B = imdilate(orange_raw, strel('disk', 14)); % ← TUNE loop gap
+        rubber_band_B = imfill(rubber_band_B, 'holes');
+        rubber_band_B = imerode(rubber_band_B, strel('disk', 10));
+        rubber_band_B = imfill(rubber_band_B, 'holes');
+        rubber_band_B = bwareaopen(rubber_band_B, 120);     % ← TUNE
+
+        % ── Mark PATH B here ──────────────────────────────────────────────
+        cc_B    = bwconncomp(rubber_band_B);
+        props_B = regionprops(cc_B, 'BoundingBox', 'Area');
+        props_B = props_B([props_B.Area] >= 120);           % ← TUNE
+
+        % Prevent rubber band bbox from absorbing plastic:
+        % shrink each B bbox to only the region NOT covered by Path A mask
+        props_B = trimBoxesToExcludeMask(props_B, plastic_A, img_h, img_w);
+
+        %% ══════════════════════════════════════════════════════════════════
+        %  PATH C — METAL CLIP
+        %  Fragment detection + bbox expansion. Marked immediately.
+        %% ══════════════════════════════════════════════════════════════════
+
+        grey_frag  = (S < 0.22) & (V > 0.25) & (V < 0.80) & ~background_mask & clip_zone;
+        shiny_frag = (V > 0.78) & (S < 0.20) & ~background_mask & clip_zone;
+        dark_frag  = (V < 0.30) & (S < 0.35) & ~background_mask & clip_zone;
+
+        clip_raw = grey_frag | shiny_frag | dark_frag;
+        clip_raw = medfilt2(clip_raw, [3 3]);
+        clip_raw = bwareaopen(clip_raw, 40);                % ← TUNE
+
+        clip_merged = imdilate(clip_raw, strel('disk', 10));
+        clip_merged = imfill(clip_merged, 'holes');
+        clip_merged = imerode(clip_merged, strel('disk', 6));
+        clip_merged = imfill(clip_merged, 'holes');
+        clip_merged = bwareaopen(clip_merged, 80);          % ← TUNE
+
+        % Expand bounding boxes to cover full clip body
+        bbox_pad = 18;                                      % ← TUNE
+        cc_clip  = bwconncomp(clip_merged);
+        s_clip   = regionprops(cc_clip, 'BoundingBox', 'Area');
+
+        clip_C = false(img_h, img_w);
+        props_C = struct('BoundingBox', {}, 'Area', {});
+        for i = 1:numel(s_clip)
+            if s_clip(i).Area < 80, continue; end           % ← TUNE
+            bb = s_clip(i).BoundingBox;
+            x1 = max(1,     floor(bb(1)) - bbox_pad);
+            y1 = max(1,     floor(bb(2)) - bbox_pad);
+            x2 = min(img_w, ceil(bb(1) + bb(3)) + bbox_pad);
+            y2 = min(img_h, ceil(bb(2) + bb(4)) + bbox_pad);
+
+            % Reject if box is mostly background
+            box_mask = false(img_h, img_w);
+            box_mask(y1:y2, x1:x2) = true;
+            if nnz(box_mask & background_mask) / nnz(box_mask) > 0.50, continue; end
+
+            clip_C(y1:y2, x1:x2) = true;
+            props_C(end+1).BoundingBox = [x1, y1, x2-x1, y2-y1];
+            props_C(end).Area          = (x2-x1) * (y2-y1);
+        end
+
+        % ── Mark PATH C here ──────────────────────────────────────────────
+        % Clip boxes must not fully contain a plastic or rubber band box
+        props_C = rejectBoxesContainedIn(props_C, [props_A(:); props_B(:)]);
+
+        %% ── STEP 5: FINAL MASK (display only) ───────────────────────────
+        final_mask = plastic_A | rubber_band_B | clip_C;
+        final_mask = imfill(final_mask, 'holes');
+        final_mask = bwareaopen(final_mask, 100);
+
+        % All props combined for saving — each already marked independently
+        all_props = [props_A(:); props_B(:); props_C(:)];
+        foreign_objects = all_props;
+
+        RL_foreign_mask = final_mask;
+        save(fullfile(pwd, 'RNpic.mat'), ...
+            'glove_red_raw', 'glove_filled', 'shadow_guard', 'safe_interior', ...
+            'plastic_A', 'rubber_band_B', 'clip_C', 'RL_foreign_mask');
+        save(fullfile(pwd, 'RNvariables.mat'), 'foreign_objects');
+
+        %% ── STEP 6: DISPLAY ─────────────────────────────────────────────
+        if showFigures
+            figure('Name', 'Processing Steps - Foreign Object Detection', ...
+                   'NumberTitle', 'off', 'Position', [50 50 1500 900]);
+
+            subplot(3,4,1);  imshow(input_img);                                 title('1. Original RGB');
+            subplot(3,4,2);  imshow(glove_red_raw);                             title('2. Red Glove (unfilled)');
+            subplot(3,4,3);  imshow(shadow_guard);                              title('3. Shadow Guard (excluded)');
+            subplot(3,4,4);  imshow(safe_interior);                             title('4. Safe Search Zone');
+
+            subplot(3,4,5);  imshow(plastic_A);                                 title('5. PATH A: White Plastic');
+            subplot(3,4,6);  imshow(rubber_band_B);                             title('6. PATH B: Rubber Band');
+            subplot(3,4,7);  imshow(clip_raw);                                  title('7. PATH C raw: Clip Fragments');
+            subplot(3,4,8);  imshow(clip_C);                                    title('8. PATH C: Clip (expanded)');
+
+            subplot(3,4,9);  imshow(hull_gap);                                  title('9. Hull Gap');
+            subplot(3,4,10); imshow(final_mask);                                title('10. Final Mask (display only)');
+            subplot(3,4,11); imshow(labeloverlay(input_img, final_mask, ...
+                              'Colormap',[1 1 0],'Transparency',0.45));         title('11. Final Overlay');
+
+            % Subplot 12: boxes drawn from per-path props, not final mask
+            subplot(3,4,12); imshow(input_img); hold on;    title('12. Detected Foreign Objects');
+            for i = 1:numel(props_A)
+                drawBox(gca, props_A(i).BoundingBox, 'r', sprintf('Foreign Object %d', i));
+            end
+            offset = numel(props_A);
+            for i = 1:numel(props_B)
+                drawBox(gca, props_B(i).BoundingBox, 'r', sprintf('Foreign Object %d', offset+i));
+            end
+            offset = offset + numel(props_B);
+            for i = 1:numel(props_C)
+                drawBox(gca, props_C(i).BoundingBox, 'r', sprintf('Foreign Object %d', offset+i));
+            end
+            hold off;
+        end
+
+    catch ME
+        disp(ME.message);
+    end
+end
+
+%% ── HELPER: draw one bounding box with label ─────────────────────────────
+function drawBox(ax, bb, color, label)
+    rectangle(ax, 'Position', bb, 'EdgeColor', color, 'LineWidth', 2);
+    text(ax, bb(1), bb(2)-6, label, ...
+         'Color', color, 'FontSize', 9, 'FontWeight', 'bold', ...
+         'BackgroundColor', 'white', 'Margin', 1);
+end
+
+%% ── HELPER: trim Path B boxes to exclude pixels covered by Path A ────────
+% If a rubber band box heavily overlaps a plastic region, shrink it
+% so they are counted as separate objects.
+function props_out = trimBoxesToExcludeMask(props_in, exclude_mask, img_h, img_w)
+    props_out = props_in;
+    for i = 1:numel(props_in)
+        bb = props_in(i).BoundingBox;
+        x1 = max(1, round(bb(1))); y1 = max(1, round(bb(2)));
+        x2 = min(img_w, x1 + round(bb(3)) - 1);
+        y2 = min(img_h, y1 + round(bb(4)) - 1);
+        box_area = (x2-x1+1) * (y2-y1+1);
+        overlap  = nnz(exclude_mask(y1:y2, x1:x2));
+        % If more than 40% of this box is covered by plastic, flag it
+        if overlap / box_area > 0.40                        % ← TUNE overlap tolerance
+            props_out(i).flagged = true;
+        else
+            props_out(i).flagged = false;
+        end
+    end
+    % Remove heavily overlapping boxes
+    if isfield(props_out, 'flagged')
+        props_out = props_out(~[props_out.flagged]);
+    end
+end
+
+%% ── HELPER: reject clip boxes that are fully contained in other boxes ─────
+function props_out = rejectBoxesContainedIn(props_clip, props_others)
+    props_out = props_clip;
+    if isempty(props_clip) || isempty(props_others), return; end
+    keep = true(1, numel(props_clip));
+    for i = 1:numel(props_clip)
+        cb = props_clip(i).BoundingBox; % [x y w h]
+        for j = 1:numel(props_others)
+            ob = props_others(j).BoundingBox;
+            % Check if clip box centre is inside another box
+            cx = cb(1) + cb(3)/2;  cy = cb(2) + cb(4)/2;
+            if cx > ob(1) && cx < ob(1)+ob(3) && cy > ob(2) && cy < ob(2)+ob(4)
+                keep(i) = false;    % clip centre inside another object's box
+                break;
+            end
+        end
+    end
+    props_out = props_out(keep);
+end
